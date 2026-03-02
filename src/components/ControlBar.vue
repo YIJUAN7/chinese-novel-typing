@@ -5,30 +5,60 @@ const emit = defineEmits<{
   (e: 'import-text', text: string): void
   (e: 'reset'): void
   (e: 'start'): void
+  (e: 'open-chapter-list'): void
 }>()
 
 const showModal = ref(false)
 const inputText = ref('')
+const isUploading = ref(false)
+const errorMessage = ref('')
 
 const handleImport = () => {
   if (inputText.value.trim()) {
     emit('import-text', inputText.value.trim())
     showModal.value = false
     inputText.value = ''
+    errorMessage.value = ''
   }
 }
 
-const handleFileImport = (e: Event) => {
+const handleFileImport = async (e: Event) => {
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
   if (!file) return
 
-  const reader = new FileReader()
-  reader.onload = (event) => {
-    const text = event.target?.result as string
-    emit('import-text', text.trim())
+  // 验证文件类型
+  if (!file.name.endsWith('.txt')) {
+    errorMessage.value = '请选择 .txt 格式的文件'
+    return
   }
-  reader.readAsText(file)
+
+  // 验证文件大小（最大 5MB）
+  if (file.size > 5 * 1024 * 1024) {
+    errorMessage.value = '文件大小不能超过 5MB'
+    return
+  }
+
+  isUploading.value = true
+  errorMessage.value = ''
+
+  try {
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = event.target?.result as string
+      emit('import-text', text.trim())
+      isUploading.value = false
+    }
+    reader.onerror = () => {
+      errorMessage.value = '文件读取失败，请重试'
+      isUploading.value = false
+    }
+    reader.readAsText(file)
+  } catch {
+    errorMessage.value = '文件读取失败，请重试'
+    isUploading.value = false
+  }
+
   target.value = ''
 }
 
@@ -39,6 +69,10 @@ const handleStart = () => {
 const handleReset = () => {
   emit('reset')
 }
+
+const handleOpenChapterList = () => {
+  emit('open-chapter-list')
+}
 </script>
 
 <template>
@@ -47,9 +81,12 @@ const handleReset = () => {
       <button class="btn btn-primary" @click="showModal = true">
         📄 导入文本
       </button>
-      <button class="btn btn-secondary" @click="handleFileImport">
+      <label class="btn btn-secondary">
         📁 从文件导入
         <input type="file" accept=".txt" @change="handleFileImport" hidden />
+      </label>
+      <button class="btn btn-secondary" @click="handleOpenChapterList">
+        📑 章节列表
       </button>
     </div>
 
@@ -63,6 +100,12 @@ const handleReset = () => {
     </div>
   </div>
 
+  <!-- 错误提示 -->
+  <div v-if="errorMessage" class="error-toast">
+    {{ errorMessage }}
+    <button class="toast-close" @click="errorMessage = ''">×</button>
+  </div>
+
   <!-- 导入文本弹窗 -->
   <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
     <div class="modal">
@@ -71,6 +114,7 @@ const handleReset = () => {
         <button class="btn-close" @click="showModal = false">×</button>
       </div>
       <div class="modal-body">
+        <p class="modal-tip">支持粘贴文本或上传 .txt 文件，自动识别章节结构</p>
         <textarea
           v-model="inputText"
           placeholder="请粘贴要练习的小说文本..."
@@ -129,6 +173,11 @@ const handleReset = () => {
 
 .btn-secondary:hover {
   background-color: var(--text-disabled);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-close {
@@ -195,6 +244,12 @@ const handleReset = () => {
   overflow-y: auto;
 }
 
+.modal-tip {
+  margin-bottom: var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 .modal-body textarea {
   width: 100%;
   min-height: 200px;
@@ -220,6 +275,37 @@ const handleReset = () => {
   border-top: 1px solid var(--bg-tertiary);
 }
 
+.error-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--color-error);
+  color: white;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  z-index: 2000;
+  animation: slideDown 0.3s ease;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -236,6 +322,17 @@ const handleReset = () => {
   }
   to {
     transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translate(-50%, -20px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
     opacity: 1;
   }
 }

@@ -2,17 +2,43 @@
 import { ref, watch } from 'vue'
 import ControlBar from './components/ControlBar.vue'
 import TypingEditor from './components/TypingEditor.vue'
+import ChapterList from './components/ChapterList.vue'
+import { useChapter } from './composables/useChapter'
+import { parseChapters } from './utils/chapterParser'
 
 // 默认示例文本
-const defaultText = `那是一个很好的时代，那是一个糟糕的时代；那是一个智慧的年代，那是一个愚昧的年代；那是一个充满希望的春天，那是一个充满失望的冬天。我们面前应有尽有，我们面前一无所有。`
+const defaultText = `那是一个很好的时代，那是一个糟糕的时代；那是一个智慧的年代，那是一个愚昧的年代。`
 
 const originalText = ref(defaultText)
 const progress = ref(0)
 const isComplete = ref(false)
 const editorRef = ref<InstanceType<typeof TypingEditor> | null>(null)
 
+// 章节管理
+const {
+  chapters,
+  currentChapterIndex,
+  isChapterListOpen,
+  currentChapterTitle,
+  setChapters,
+  selectChapter,
+  closeChapterList,
+  resetChapters,
+} = useChapter()
+
+// 处理文本导入（包含章节解析）
 const handleImportText = (text: string) => {
-  originalText.value = text
+  // 解析章节
+  const parsedChapters = parseChapters(text)
+  setChapters(parsedChapters)
+
+  // 如果有多个章节，显示第一章
+  if (parsedChapters.length > 0) {
+    originalText.value = parsedChapters[0].content
+  } else {
+    originalText.value = text
+  }
+
   isComplete.value = false
   progress.value = 0
 }
@@ -34,11 +60,35 @@ const handleStart = () => {
   editorRef.value?.focusEditor()
 }
 
+const handleOpenChapterList = () => {
+  if (chapters.value.length > 0) {
+    closeChapterList()
+  }
+}
+
+const handleSelectChapter = (chapter: { index: number; content: string }) => {
+  selectChapter(chapter.index)
+  originalText.value = chapter.content
+  isComplete.value = false
+  progress.value = 0
+}
+
+// 监听原文变化
 watch(
   () => originalText.value,
   () => {
     isComplete.value = false
     progress.value = 0
+  }
+)
+
+// 监听章节重置
+watch(
+  () => chapters.value.length,
+  (newLength) => {
+    if (newLength === 0) {
+      resetChapters()
+    }
   }
 )
 </script>
@@ -47,7 +97,10 @@ watch(
   <div class="app">
     <header class="app-header">
       <h1>小说跟打器</h1>
-      <p class="subtitle">在光标后显示待输入文本的创新打字练习工具</p>
+      <p class="subtitle">
+        <span v-if="currentChapterTitle">当前章节：{{ currentChapterTitle }}</span>
+        <span v-else>在光标后显示待输入文本的创新打字练习工具</span>
+      </p>
     </header>
 
     <main class="app-main">
@@ -55,6 +108,7 @@ watch(
         @import-text="handleImportText"
         @reset="handleReset"
         @start="handleStart"
+        @open-chapter-list="handleOpenChapterList"
       />
 
       <div class="editor-wrapper">
@@ -83,6 +137,15 @@ watch(
         🎉 恭喜完成！太棒了！
       </div>
     </main>
+
+    <!-- 章节列表 -->
+    <ChapterList
+      :chapters="chapters"
+      :current-chapter-index="currentChapterIndex"
+      :show="isChapterListOpen"
+      @select="handleSelectChapter"
+      @close="closeChapterList"
+    />
   </div>
 </template>
 
