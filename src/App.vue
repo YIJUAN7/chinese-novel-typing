@@ -5,6 +5,7 @@ import TypingEditor from './components/TypingEditor.vue'
 import ChapterList from './components/ChapterList.vue'
 import { useChapter } from './composables/useChapter'
 import { parseChapters } from './utils/chapterParser'
+import { useProgressStorage } from './composables/useProgressStorage'
 
 // 默认示例文本
 const defaultText = `那是一个很好的时代，那是一个糟糕的时代；那是一个智慧的年代，那是一个愚昧的年代。`
@@ -26,34 +27,78 @@ const {
   resetChapters,
 } = useChapter()
 
+// 进度保存
+const { saveChapterProgress, getChapterProgress } = useProgressStorage()
+
+// 当前统计数据
+const currentStats = ref({
+  elapsedTime: 0,
+  errors: 0,
+  correctChars: 0,
+})
+
 // 处理文本导入（包含章节解析）
 const handleImportText = (text: string) => {
   // 解析章节
   const parsedChapters = parseChapters(text)
   setChapters(parsedChapters)
 
-  // 如果有多个章节，显示第一章
+  // 如果有多个章节，显示第一章并恢复进度
   if (parsedChapters.length > 0) {
-    originalText.value = parsedChapters[0].content
+    const firstChapter = parsedChapters[0]
+    originalText.value = firstChapter.content
+
+    // 恢复该章节的进度
+    const savedProgress = getChapterProgress(firstChapter.title)
+    if (savedProgress) {
+      // 如果有保存的进度，可以选择恢复或不恢复
+      // 这里暂时不自动恢复，让用户选择
+      console.log('检测到已保存的进度:', savedProgress)
+    }
   } else {
     originalText.value = text
   }
 
   isComplete.value = false
   progress.value = 0
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
 }
 
 const handleProgress = (value: number) => {
   progress.value = value
 }
 
+const handleStatsChange = (stats: { elapsedTime: number; errors: number; correctChars: number }) => {
+  currentStats.value = stats
+
+  // 实时更新进度保存
+  if (currentChapterTitle.value) {
+    saveChapterProgress(currentChapterTitle.value, {
+      chapterIndex: currentChapterIndex.value || 0,
+      cursorPosition: Math.round((progress.value / 100) * originalText.value.length),
+      ...stats,
+    })
+  }
+}
+
 const handleComplete = () => {
   isComplete.value = true
+
+  // 保存完成状态
+  if (currentChapterTitle.value) {
+    saveChapterProgress(currentChapterTitle.value, {
+      chapterIndex: currentChapterIndex.value || 0,
+      cursorPosition: originalText.value.length,
+      ...currentStats.value,
+      completedAt: new Date().toISOString(),
+    })
+  }
 }
 
 const handleReset = () => {
   isComplete.value = false
   progress.value = 0
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
 }
 
 const handleStart = () => {
@@ -66,11 +111,23 @@ const handleOpenChapterList = () => {
   }
 }
 
-const handleSelectChapter = (chapter: { index: number; content: string }) => {
+const handleSelectChapter = (chapter: { index: number; title: string; content: string }) => {
   selectChapter(chapter.index)
   originalText.value = chapter.content
   isComplete.value = false
   progress.value = 0
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+
+  // 恢复该章节的进度（可选功能）
+  const savedProgress = getChapterProgress(chapter.title)
+  if (savedProgress && savedProgress.cursorPosition > 0) {
+    // 询问用户是否要恢复进度
+    const resume = confirm(`检测到"${chapter.title}"已练习到第 ${savedProgress.cursorPosition} 字，是否恢复进度？`)
+    if (resume) {
+      // 这里需要 TypingEditor 支持设置初始光标位置
+      // 暂时不实现，留给后续版本
+    }
+  }
 }
 
 // 监听原文变化
@@ -117,6 +174,7 @@ watch(
           :original-text="originalText"
           @progress="handleProgress"
           @complete="handleComplete"
+          @stats-change="handleStatsChange"
         />
       </div>
 

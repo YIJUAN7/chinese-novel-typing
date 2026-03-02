@@ -9,6 +9,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'progress', progress: number): void
   (e: 'complete'): void
+  (e: 'stats-change', stats: { elapsedTime: number; errors: number; correctChars: number }): void
 }>()
 
 const editorRef = ref<HTMLElement | null>(null)
@@ -25,6 +26,7 @@ const {
   resetStats,
   recordError,
   recordCorrectChar,
+  state,
 } = useStats()
 
 let isUpdating = false
@@ -115,6 +117,13 @@ watch(
 
     const progress = props.originalText.length > 0 ? (newPos / props.originalText.length) * 100 : 0
     emit('progress', progress)
+
+    // 发出统计数据变化事件
+    emit('stats-change', {
+      elapsedTime: elapsedTime.value,
+      errors: state.totalErrors,
+      correctChars: state.correctChars,
+    })
 
     if (newPos === props.originalText.length && newPos > 0) {
       emit('complete')
@@ -252,6 +261,12 @@ onMounted(() => {
 
 defineExpose({
   focusEditor,
+  getCursorPosition: () => cursorPosition.value,
+  getStats: () => ({
+    elapsedTime: elapsedTime.value,
+    errors: state.totalErrors,
+    correctChars: state.correctChars,
+  }),
 })
 </script>
 
