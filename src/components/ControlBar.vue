@@ -15,7 +15,9 @@ const errorMessage = ref('')
 
 const handleImport = () => {
   if (inputText.value.trim()) {
-    emit('import-text', inputText.value.trim())
+    // 标准化换行符
+    const text = inputText.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    emit('import-text', text.trim())
     showModal.value = false
     inputText.value = ''
     errorMessage.value = ''
@@ -45,7 +47,9 @@ const handleFileImport = async (e: Event) => {
   try {
     const reader = new FileReader()
     reader.onload = (event) => {
-      const text = event.target?.result as string
+      let text = event.target?.result as string
+      // 标准化换行符
+      text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
       emit('import-text', text.trim())
       isUploading.value = false
     }

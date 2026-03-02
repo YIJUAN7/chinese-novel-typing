@@ -150,8 +150,14 @@ const handleEditorInput = (e: Event) => {
     return
   }
 
-  // 获取用户输入的字符
-  const data = (e as InputEvent).data
+  // 获取用户输入的字符（可能是换行符）
+  let data = (e as InputEvent).data
+
+  // 如果 inputType 为 insertLineBreak 或 insertParagraph，说明用户按了 Enter
+  if (inputType === 'insertLineBreak' || inputType === 'insertParagraph') {
+    data = '\n'
+  }
+
   if (!data) {
     nextTick(() => updateEditorContent())
     return
@@ -179,6 +185,54 @@ const handleEditorInput = (e: Event) => {
       updateEditorContent()
     })
   }
+}
+
+// 处理键盘事件
+const handleKeyDown = (e: KeyboardEvent) => {
+  // 允许的功能键
+  const allowedKeys = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab']
+  if (allowedKeys.includes(e.key)) return
+
+  // 如果下一个字符是换行符，允许 Enter 键并手动处理
+  if (e.key === 'Enter') {
+    const expectedChar = props.originalText[cursorPosition.value]
+    if (expectedChar === '\n') {
+      // 阻止默认的换行行为（插入 br），由 input 事件处理
+      e.preventDefault()
+      // 手动触发输入处理
+      handleEditorInput({
+        preventDefault: () => {},
+        target: e.target,
+        inputType: 'insertLineBreak',
+        data: '\n',
+      } as InputEvent)
+    } else {
+      // 如果不需要输入换行符，阻止 Enter 键
+      e.preventDefault()
+    }
+    return
+  }
+
+  // 阻止所有修改性按键
+  const blockKeys = ['Backspace', 'Delete']
+  if (blockKeys.includes(e.key)) {
+    e.preventDefault()
+    return
+  }
+
+  // 阻止 Ctrl/Command 组合键
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault()
+    return
+  }
+
+  // 阻止方向键
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+    e.preventDefault()
+    return
+  }
+
+  // 其他字符键将通过 inputType 为 insertText 的 input 事件处理
 }
 
 const handleCompositionStart = () => {
@@ -216,34 +270,6 @@ const handleCompositionEnd = (e: CompositionEvent) => {
   }
 
   nextTick(() => updateEditorContent())
-}
-
-// 处理键盘事件
-const handleKeyDown = (e: KeyboardEvent) => {
-  // 允许的功能键
-  const allowedKeys = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab']
-  if (allowedKeys.includes(e.key)) return
-
-  // 阻止所有修改性按键
-  const blockKeys = ['Backspace', 'Delete', 'Enter']
-  if (blockKeys.includes(e.key)) {
-    e.preventDefault()
-    return
-  }
-
-  // 阻止 Ctrl/Command 组合键
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault()
-    return
-  }
-
-  // 阻止方向键
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
-    e.preventDefault()
-    return
-  }
-
-  // 其他字符键将通过 inputType 为 insertText 的 input 事件处理
 }
 
 // 阻止粘贴

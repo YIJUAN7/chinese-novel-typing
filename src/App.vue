@@ -24,6 +24,7 @@ const {
   setChapters,
   selectChapter,
   closeChapterList,
+  openChapterList,
   resetChapters,
 } = useChapter()
 
@@ -41,11 +42,15 @@ const currentStats = ref({
 const handleImportText = (text: string) => {
   // 解析章节
   const parsedChapters = parseChapters(text)
+  console.log('解析到的章节数:', parsedChapters.length)
+  console.log('章节列表:', parsedChapters.map(c => c.title))
   setChapters(parsedChapters)
 
   // 如果有多个章节，显示第一章并恢复进度
   if (parsedChapters.length > 0) {
     const firstChapter = parsedChapters[0]
+    console.log('第一章标题:', firstChapter.title)
+    console.log('第一章内容长度:', firstChapter.content.length)
     originalText.value = firstChapter.content
 
     // 恢复该章节的进度
@@ -107,7 +112,7 @@ const handleStart = () => {
 
 const handleOpenChapterList = () => {
   if (chapters.value.length > 0) {
-    closeChapterList()
+    openChapterList()
   }
 }
 
