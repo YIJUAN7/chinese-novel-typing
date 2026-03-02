@@ -7,6 +7,9 @@ import { useChapter } from './composables/useChapter'
 import { parseChapters } from './utils/chapterParser'
 import { useProgressStorage } from './composables/useProgressStorage'
 
+// 已保存小说列表弹窗状态
+const isSavedNovelsOpen = ref(false)
+
 // 默认示例文本
 const defaultText = `那是一个很好的时代，那是一个糟糕的时代；那是一个智慧的年代，那是一个愚昧的年代。`
 
@@ -29,7 +32,10 @@ const {
 } = useChapter()
 
 // 进度保存
-const { saveChapterProgress, getChapterProgress } = useProgressStorage()
+const { saveNovelProgress, getNovelProgress, saveNovel, getSavedNovels, loadNovel, deleteNovel } = useProgressStorage()
+
+// 当前小说标题（用于进度保存）
+const currentNovelTitle = ref('')
 
 // 当前统计数据
 const currentStats = ref({
@@ -46,19 +52,57 @@ const handleImportText = (text: string) => {
   console.log('章节列表:', parsedChapters.map(c => c.title))
   setChapters(parsedChapters)
 
+  // 保存小说文本
+  const novelTitle = parsedChapters.length > 0
+    ? `小说-${parsedChapters[0]?.title}-${new Date().toLocaleDateString('zh-CN')}`
+    : `小说-${new Date().toLocaleDateString('zh-CN')}`
+  const chapterTitles = parsedChapters.map(c => c.title)
+  saveNovel(novelTitle, text, chapterTitles)
+  currentNovelTitle.value = novelTitle
+
   // 如果有多个章节，显示第一章并恢复进度
   if (parsedChapters.length > 0) {
     const firstChapter = parsedChapters[0]
+    if (!firstChapter) return
+
     console.log('第一章标题:', firstChapter.title)
     console.log('第一章内容长度:', firstChapter.content.length)
     originalText.value = firstChapter.content
 
-    // 恢复该章节的进度
-    const savedProgress = getChapterProgress(firstChapter.title)
+    // 恢复该小说的进度
+    const savedProgress = getNovelProgress(novelTitle)
     if (savedProgress) {
-      // 如果有保存的进度，可以选择恢复或不恢复
-      // 这里暂时不自动恢复，让用户选择
       console.log('检测到已保存的进度:', savedProgress)
+
+      // 如果保存的章节索引有效，切换到对应章节
+      const targetIndex = savedProgress.chapterIndex || 0
+      let targetChapter = firstChapter
+
+      if (targetIndex < parsedChapters.length && targetIndex > 0) {
+        const chapter = parsedChapters[targetIndex]
+        if (chapter) {
+          targetChapter = chapter
+          selectChapter(targetIndex)
+          originalText.value = targetChapter.content
+        }
+      }
+
+      // 只要有进度记录就提示恢复（包括 cursorPosition = 0 的情况）
+      const positionText = savedProgress.cursorPosition > 0
+        ? `第 ${savedProgress.cursorPosition} 字`
+        : `第 ${targetIndex + 1} 章开头`
+      const resume = confirm(`检测到"${novelTitle}"已练习到${positionText}，是否恢复进度？`)
+      if (resume) {
+        nextTick(() => {
+          editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+          progress.value = (savedProgress.cursorPosition / targetChapter.content.length) * 100
+          currentStats.value = {
+            elapsedTime: savedProgress.elapsedTime,
+            errors: savedProgress.errors,
+            correctChars: savedProgress.correctChars,
+          }
+        })
+      }
     }
   } else {
     originalText.value = text
@@ -76,9 +120,9 @@ const handleProgress = (value: number) => {
 const handleStatsChange = (stats: { elapsedTime: number; errors: number; correctChars: number }) => {
   currentStats.value = stats
 
-  // 实时更新进度保存
-  if (currentChapterTitle.value) {
-    saveChapterProgress(currentChapterTitle.value, {
+  // 实时更新进度保存（每本小说只保留一个最新进度）
+  if (currentNovelTitle.value) {
+    saveNovelProgress(currentNovelTitle.value, {
       chapterIndex: currentChapterIndex.value || 0,
       cursorPosition: Math.round((progress.value / 100) * originalText.value.length),
       ...stats,
@@ -95,11 +139,13 @@ const handleComplete = () => {
     currentStats.value = finalStats
   }
 
-  // 保存完成状态
-  if (currentChapterTitle.value) {
-    saveChapterProgress(currentChapterTitle.value, {
-      chapterIndex: currentChapterIndex.value || 0,
-      cursorPosition: originalText.value.length,
+  // 保存完成状态（每本小说只保留一个最新进度）
+  // 完成一章后，进度保存为下一章的开头
+  if (currentNovelTitle.value && currentChapterIndex.value !== null) {
+    const nextChapterIndex = currentChapterIndex.value + 1
+    saveNovelProgress(currentNovelTitle.value, {
+      chapterIndex: nextChapterIndex,  // 保存为下一章索引
+      cursorPosition: 0,               // 下一章从头开始
       ...currentStats.value,
       completedAt: new Date().toISOString(),
     })
@@ -128,8 +174,39 @@ const handleNextOrReset = () => {
     const hasNext = currentChapterIndex.value < chapters.value.length - 1
     if (hasNext) {
       const nextIndex = currentChapterIndex.value + 1
-      selectChapter(nextIndex)
-      originalText.value = chapters.value[nextIndex].content
+      const nextChapter = chapters.value[nextIndex]
+      if (nextChapter) {
+        // 先保存当前进度（更新章节索引）
+        const currentFinalStats = editorRef.value?.getStats()
+        if (currentFinalStats && currentNovelTitle.value) {
+          saveNovelProgress(currentNovelTitle.value, {
+            chapterIndex: nextIndex, // 更新为下一章的索引
+            cursorPosition: 0, // 下一章从头开始
+            ...currentFinalStats,
+          })
+        }
+
+        selectChapter(nextIndex)
+        originalText.value = nextChapter.content
+
+        // 检查该小说是否有已保存的进度
+        const savedProgress = getNovelProgress(currentNovelTitle.value)
+        if (savedProgress && savedProgress.cursorPosition > 0 && savedProgress.chapterIndex === nextIndex) {
+          const resume = confirm(`检测到"${nextChapter.title}"已练习到第 ${savedProgress.cursorPosition} 字，是否恢复进度？`)
+          if (resume) {
+            nextTick(() => {
+              editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+              progress.value = (savedProgress.cursorPosition / nextChapter.content.length) * 100
+              currentStats.value = {
+                elapsedTime: savedProgress.elapsedTime,
+                errors: savedProgress.errors,
+                correctChars: savedProgress.correctChars,
+              }
+            })
+            return // 如果恢复进度，直接返回
+          }
+        }
+      }
     }
   }
 
@@ -155,6 +232,76 @@ const handleOpenChapterList = () => {
   }
 }
 
+const handleOpenSavedNovels = () => {
+  isSavedNovelsOpen.value = true
+}
+
+const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) => {
+  const loaded = loadNovel(novel.title)
+  if (loaded) {
+    // 解析章节
+    const parsedChapters = parseChapters(loaded.content)
+    setChapters(parsedChapters)
+
+    // 设置当前小说标题
+    currentNovelTitle.value = novel.title
+
+    if (parsedChapters.length > 0) {
+      const firstChapter = parsedChapters[0]
+      if (!firstChapter) return
+
+      originalText.value = firstChapter.content
+
+      // 恢复该小说的进度
+      const savedProgress = getNovelProgress(novel.title)
+      if (savedProgress) {
+        // 如果保存的章节索引有效，切换到对应章节
+        const targetIndex = savedProgress.chapterIndex || 0
+        let targetChapter = parsedChapters[0]
+
+        // 检查是否有下一章
+        if (targetIndex < parsedChapters.length && targetIndex > 0) {
+          const chapter = parsedChapters[targetIndex]
+          if (chapter) {
+            targetChapter = chapter
+            selectChapter(targetIndex)
+            originalText.value = targetChapter.content
+          }
+        }
+
+        // 如果有进度（cursorPosition > 0）或已保存下一章进度，提示恢复
+        if (savedProgress.cursorPosition > 0 || (targetIndex > 0 && targetIndex <= parsedChapters.length)) {
+          const resume = confirm(`检测到"${novel.title}"已练习到第 ${savedProgress.cursorPosition} 字（第${targetIndex + 1}章开头），是否恢复进度？`)
+          if (resume) {
+            nextTick(() => {
+              editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+              progress.value = (savedProgress.cursorPosition / originalText.value.length) * 100
+              currentStats.value = {
+                elapsedTime: savedProgress.elapsedTime,
+                errors: savedProgress.errors,
+                correctChars: savedProgress.correctChars,
+              }
+            })
+          }
+        }
+      }
+    } else {
+      originalText.value = loaded.content
+    }
+
+    isComplete.value = false
+    progress.value = 0
+    currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+    isSavedNovelsOpen.value = false
+  }
+}
+
+const handleDeleteNovel = (novel: { title: string; chapters: string[] }) => {
+  if (confirm(`确定要删除"${novel.title}"吗？`)) {
+    deleteNovel(novel.title)
+  }
+}
+
 const handleSelectChapter = (chapter: { index: number; title: string; content: string }) => {
   selectChapter(chapter.index)
   originalText.value = chapter.content
@@ -162,14 +309,26 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
   progress.value = 0
   currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
 
-  // 恢复该章节的进度（可选功能）
-  const savedProgress = getChapterProgress(chapter.title)
-  if (savedProgress && savedProgress.cursorPosition > 0) {
-    // 询问用户是否要恢复进度
-    const resume = confirm(`检测到"${chapter.title}"已练习到第 ${savedProgress.cursorPosition} 字，是否恢复进度？`)
-    if (resume) {
-      // 这里需要 TypingEditor 支持设置初始光标位置
-      // 暂时不实现，留给后续版本
+  // 恢复该小说的进度（检查是否是该章节）
+  if (currentNovelTitle.value) {
+    const savedProgress = getNovelProgress(currentNovelTitle.value)
+    if (savedProgress && savedProgress.cursorPosition > 0 && savedProgress.chapterIndex === chapter.index) {
+      // 询问用户是否要恢复进度
+      const resume = confirm(`检测到"${chapter.title}"已练习到第 ${savedProgress.cursorPosition} 字，是否恢复进度？`)
+      if (resume) {
+        // 设置编辑器光标位置
+        nextTick(() => {
+          editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+          // 更新进度条
+          progress.value = (savedProgress.cursorPosition / chapter.content.length) * 100
+          // 恢复统计数据
+          currentStats.value = {
+            elapsedTime: savedProgress.elapsedTime,
+            errors: savedProgress.errors,
+            correctChars: savedProgress.correctChars,
+          }
+        })
+      }
     }
   }
 }
@@ -219,6 +378,7 @@ onUnmounted(() => {
         @reset="handleReset"
         @start="handleStart"
         @open-chapter-list="handleOpenChapterList"
+        @open-saved-novels="handleOpenSavedNovels"
       />
 
       <div class="editor-wrapper">
@@ -274,6 +434,45 @@ onUnmounted(() => {
       @select="handleSelectChapter"
       @close="closeChapterList"
     />
+
+    <!-- 已保存小说列表 -->
+    <div v-if="isSavedNovelsOpen" class="modal-overlay" @click.self="isSavedNovelsOpen = false">
+      <div class="saved-novels-modal">
+        <div class="modal-header">
+          <h2>📚 已保存的小说</h2>
+          <button class="btn-close" @click="isSavedNovelsOpen = false">×</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="getSavedNovels().length === 0" class="empty-state">
+            <p>暂无已保存的小说</p>
+            <p class="tip-text">导入小说后会自动保存</p>
+          </div>
+          <div v-else class="novel-list">
+            <div
+              v-for="novel in getSavedNovels()"
+              :key="novel.title"
+              class="novel-item"
+            >
+              <div class="novel-info">
+                <h3 class="novel-title">{{ novel.title }}</h3>
+                <p class="novel-meta">
+                  <span class="chapter-count">{{ novel.chapters.length }} 章</span>
+                  <span class="saved-time">{{ new Date(novel.savedAt).toLocaleString('zh-CN') }}</span>
+                </p>
+              </div>
+              <div class="novel-actions">
+                <button class="btn btn-sm btn-primary" @click="handleSelectSavedNovel(novel)">
+                  加载
+                </button>
+                <button class="btn btn-sm btn-danger" @click="handleDeleteNovel(novel)">
+                  删除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -442,5 +641,111 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0;
+}
+
+/* 已保存小说列表样式 */
+.saved-novels-modal {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+.saved-novels-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.saved-novels-modal .modal-header h2 {
+  font-size: 18px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.saved-novels-modal .modal-body {
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+.empty-state p {
+  margin: 8px 0;
+}
+
+.empty-state .tip-text {
+  font-size: 12px;
+  color: var(--text-disabled);
+}
+
+.novel-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.novel-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  gap: var(--spacing-md);
+}
+
+.novel-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.novel-title {
+  font-size: 14px;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.novel-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.novel-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.btn-danger {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: var(--color-error-dark);
 }
 </style>

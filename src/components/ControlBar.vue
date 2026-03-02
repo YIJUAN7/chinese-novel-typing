@@ -6,6 +6,7 @@ const emit = defineEmits<{
   (e: 'reset'): void
   (e: 'start'): void
   (e: 'open-chapter-list'): void
+  (e: 'open-saved-novels'): void
 }>()
 
 const showModal = ref(false)
@@ -77,6 +78,10 @@ const handleReset = () => {
 const handleOpenChapterList = () => {
   emit('open-chapter-list')
 }
+
+const handleOpenSavedNovels = () => {
+  emit('open-saved-novels')
+}
 </script>
 
 <template>
@@ -91,6 +96,9 @@ const handleOpenChapterList = () => {
       </label>
       <button class="btn btn-secondary" @click="handleOpenChapterList">
         📑 章节列表
+      </button>
+      <button class="btn btn-secondary" @click="handleOpenSavedNovels">
+        📚 已保存
       </button>
     </div>
 

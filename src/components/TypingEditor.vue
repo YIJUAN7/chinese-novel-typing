@@ -128,21 +128,6 @@ const placeCaretAfterCursor = () => {
   }
 }
 
-// 获取当前光标位置（基于用户实际输入）
-const getCursorFromDOM = () => {
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) return 0
-
-  const range = selection.getRangeAt(0)
-  const preCaretRange = range.cloneRange()
-  preCaretRange.selectNodeContents(editorRef.value!)
-  preCaretRange.setEnd(range.startContainer, range.startOffset)
-
-  // 获取光标前的所有文本
-  const text = preCaretRange.toString()
-  return text.length
-}
-
 // 监听原文变化
 watch(
   () => props.originalText,
@@ -194,7 +179,6 @@ const handleEditorInput = (e: Event) => {
 
   e.preventDefault()
 
-  const target = e.target as HTMLElement
   const inputType = (e as InputEvent).inputType
 
   // 处理删除操作（虽然我们阻止了，但以防万一）
@@ -345,6 +329,9 @@ onUnmounted(() => {
 defineExpose({
   focusEditor,
   getCursorPosition: () => cursorPosition.value,
+  setCursorPosition: (pos: number) => {
+    cursorPosition.value = pos
+  },
   getStats: () => ({
     elapsedTime: elapsedTime.value,
     errors: state.totalErrors.value,

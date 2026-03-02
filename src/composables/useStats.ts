@@ -1,18 +1,18 @@
-import { ref, computed } from 'vue'
+import { ref, computed, type ComputedRef, type Ref } from 'vue'
 
 export interface StatsState {
-  startTime: number | null
-  totalErrors: number
-  correctChars: number
-  errorChars: number
+  startTime: Ref<number | null>
+  totalErrors: Ref<number>
+  correctChars: Ref<number>
+  errorChars: Ref<number>
 }
 
 export interface StatsResult {
   state: StatsState
-  elapsedTime: number
-  wpm: computed<number>
-  accuracy: computed<number>
-  errorPositions: number[]
+  elapsedTime: Ref<number>
+  wpm: ComputedRef<number>
+  accuracy: ComputedRef<number>
+  errorPositions: Ref<number[]>
   startTiming: () => void
   resetStats: () => void
   recordError: (position: number) => void
@@ -66,12 +66,6 @@ export function useStats(): StatsResult {
 
   const recordCorrectChar = () => {
     correctChars.value++
-  }
-
-  // 每次调用时更新经过时间
-  const getElapsedTime = (): number => {
-    if (!startTime.value) return 0
-    return (Date.now() - startTime.value) / 1000
   }
 
   return {

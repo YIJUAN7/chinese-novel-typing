@@ -1,5 +1,96 @@
-# Vue 3 + TypeScript + Vite
+# 小说跟打器 - 网页版小说打字练习工具
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+一个创新的网页版小说跟打练习工具，支持章节管理、进度保存和实时统计。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 功能特性
+
+- **创新输入体验**：光标后跟随显示待输入文本，实时比对输入准确性
+- **章节管理**：自动识别小说章节，支持章节列表选择和切换
+- **进度保存**：每本小说只保留一个进度，完成一章后自动保存到下一章开头
+- **小说管理**：上传的小说自动保存，可随时加载已保存的小说
+- **打字统计**：实时显示用时、速度（字/分）、准确率和正确字数
+- **进度恢复**：刷新页面后自动恢复练习进度
+
+## 技术栈
+
+- **框架**：Vue 3 + TypeScript
+- **构建工具**：Vite
+- **样式**：原生 CSS（CSS 变量主题）
+- **数据存储**：LocalStorage
+
+## 快速开始
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 启动开发服务器
+
+```bash
+npm run dev
+```
+
+### 构建生产版本
+
+```bash
+npm run build
+```
+
+### 预览构建结果
+
+```bash
+npm run preview
+```
+
+## 使用方法
+
+1. **导入文本**：点击"导入文本"按钮粘贴小说内容，或从本地上传 `.txt` 文件
+2. **章节选择**：如果文本包含章节结构，会自动识别并显示章节列表
+3. **开始练习**：点击"开始"按钮或直接输入文字开始练习
+4. **切换章节**：完成一章后按任意键进入下一章，或通过章节列表选择
+5. **加载已保存**：点击"已保存"按钮加载之前练习过的小说
+
+## 章节识别规则
+
+自动识别"第 X 章"格式的章节标题，例如：
+- 第一章
+- 第 1 章
+- 第二十五章
+- 第 100 章
+
+## 进度保存说明
+
+- 每本小说只保留一个进度（包含当前章节索引和光标位置）
+- 完成一章时，进度自动保存为下一章的开头
+- 刷新页面或重新加载小说时，会提示是否恢复进度
+- 数据存储在浏览器 LocalStorage 中，无需服务器
+
+## 项目结构
+
+```
+novel-typing/
+├── src/
+│   ├── components/         # Vue 组件
+│   │   ├── TypingEditor.vue
+│   │   ├── ControlBar.vue
+│   │   └── ChapterList.vue
+│   ├── composables/        # 组合式函数
+│   │   ├── useTyping.ts
+│   │   ├── useStats.ts
+│   │   ├── useChapter.ts
+│   │   └── useProgressStorage.ts
+│   ├── utils/              # 工具函数
+│   │   └── chapterParser.ts
+│   └── styles/             # 样式文件
+└── ...
+```
+
+## 开发文档
+
+详细的开发文档请查看 [开发文档.md](../开发文档.md)
+
+## 许可证
+
+MIT

@@ -1,17 +1,17 @@
-import { ref, computed } from 'vue'
+import { ref, computed, type ComputedRef, type Ref } from 'vue'
 
 export interface TypingState {
-  cursorPosition: number
-  isComposing: boolean
-  hasError: boolean
-  errorIndex: number
+  cursorPosition: Ref<number>
+  isComposing: Ref<boolean>
+  hasError: Ref<boolean>
+  errorIndex: Ref<number>
 }
 
 export interface TypingResult {
   state: TypingState
-  typedText: computed<string>
-  pendingText: computed<string>
-  progress: computed<number>
+  typedText: ComputedRef<string>
+  pendingText: ComputedRef<string>
+  progress: ComputedRef<number>
   startTyping: () => void
   resetTyping: () => void
   handleInput: (e: InputEvent) => void
