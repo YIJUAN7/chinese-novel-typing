@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import ControlBar from './components/ControlBar.vue'
 import TypingEditor from './components/TypingEditor.vue'
 import ChapterList from './components/ChapterList.vue'
@@ -89,6 +89,12 @@ const handleStatsChange = (stats: { elapsedTime: number; errors: number; correct
 const handleComplete = () => {
   isComplete.value = true
 
+  // 获取最终的统计数据（确保时间是最新的）
+  const finalStats = editorRef.value?.getStats()
+  if (finalStats) {
+    currentStats.value = finalStats
+  }
+
   // 保存完成状态
   if (currentChapterTitle.value) {
     saveChapterProgress(currentChapterTitle.value, {
@@ -104,6 +110,39 @@ const handleReset = () => {
   isComplete.value = false
   progress.value = 0
   currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+
+  // 重置编辑器状态（触发原文变化以重置内部状态）
+  const currentText = originalText.value
+  originalText.value = ''
+  nextTick(() => {
+    originalText.value = currentText
+  })
+}
+
+// 下一章或重置
+const handleNextOrReset = () => {
+  if (!isComplete.value) return
+
+  // 尝试切换到下一章
+  if (chapters.value.length > 0 && currentChapterIndex.value !== null) {
+    const hasNext = currentChapterIndex.value < chapters.value.length - 1
+    if (hasNext) {
+      const nextIndex = currentChapterIndex.value + 1
+      selectChapter(nextIndex)
+      originalText.value = chapters.value[nextIndex].content
+    }
+  }
+
+  isComplete.value = false
+  progress.value = 0
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+}
+
+const handleKeydown = (e: KeyboardEvent) => {
+  if (isComplete.value) {
+    e.preventDefault()
+    handleNextOrReset()
+  }
 }
 
 const handleStart = () => {
@@ -153,6 +192,15 @@ watch(
     }
   }
 )
+
+// 监听键盘事件（完成状态下按任意键开始下一章）
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
@@ -194,12 +242,29 @@ watch(
         </div>
         <span class="progress-text">{{ progress.toFixed(0) }}%</span>
       </div>
-
-      <!-- 完成提示 -->
-      <div v-if="isComplete" class="complete-message">
-        🎉 恭喜完成！太棒了！
-      </div>
     </main>
+
+    <!-- 完成弹窗 -->
+    <div v-if="isComplete" class="complete-modal-overlay" @click.self="handleNextOrReset">
+      <div class="complete-modal">
+        <h2>🎉 恭喜完成！</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value">{{ currentStats.elapsedTime.toFixed(1) }}s</div>
+            <div class="stat-label">用时</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ currentStats.errors }}</div>
+            <div class="stat-label">错误</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ currentStats.correctChars }}</div>
+            <div class="stat-label">正确字数</div>
+          </div>
+        </div>
+        <p class="modal-tip-text">按任意键开始下一章</p>
+      </div>
+    </div>
 
     <!-- 章节列表 -->
     <ChapterList
@@ -216,46 +281,54 @@ watch(
 @import './styles/main.css';
 
 .app {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
 .app-header {
+  flex-shrink: 0;
   text-align: center;
-  padding: var(--spacing-lg);
+  padding: 8px var(--spacing-lg);
   background: var(--bg-primary);
   box-shadow: var(--shadow-sm);
 }
 
 .app-header h1 {
-  font-size: 28px;
+  font-size: 22px;
   color: var(--color-primary);
-  margin-bottom: var(--spacing-xs);
+  margin: 0;
 }
 
 .subtitle {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-secondary);
+  margin: 4px 0 0;
 }
 
 .app-main {
   flex: 1;
-  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  padding: 12px var(--spacing-lg);
   max-width: 1000px;
   margin: 0 auto;
   width: 100%;
+  min-height: 0;
 }
 
 .editor-wrapper {
-  margin-bottom: var(--spacing-md);
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 8px;
 }
 
 .progress-container {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  margin-top: var(--spacing-md);
+  margin-top: 8px;
 }
 
 .progress-bar {
@@ -285,10 +358,11 @@ watch(
 }
 
 .complete-message {
+  flex-shrink: 0;
   text-align: center;
-  padding: var(--spacing-lg);
-  margin-top: var(--spacing-md);
-  font-size: 20px;
+  padding: 8px;
+  margin-top: 4px;
+  font-size: 16px;
   color: var(--color-success);
   animation: celebrate 0.5s ease;
 }
@@ -300,5 +374,73 @@ watch(
   50% {
     transform: scale(1.05);
   }
+}
+
+.complete-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+.complete-modal {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--spacing-xl);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  animation: slideUp 0.3s ease;
+}
+
+.complete-modal h2 {
+  font-size: 24px;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-lg);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.stat-card {
+  background: var(--bg-tertiary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.complete-modal .btn {
+  width: 100%;
+  padding: var(--spacing-md) var(--spacing-lg);
+  font-size: 16px;
+}
+
+.modal-tip-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
 }
 </style>

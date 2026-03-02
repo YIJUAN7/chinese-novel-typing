@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, computed } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import { useStats } from '@/composables/useStats'
 
 const props = defineProps<{
@@ -19,10 +19,6 @@ const hasError = ref(false)
 const errorMsg = ref('')
 
 const {
-  elapsedTime,
-  wpm,
-  accuracy,
-  startTiming,
   resetStats,
   recordError,
   recordCorrectChar,
@@ -30,6 +26,62 @@ const {
 } = useStats()
 
 let isUpdating = false
+
+// 动态计算经过时间
+const elapsedTime = ref(0)
+const timerRef = ref<number | null>(null)
+const startTimeRef = ref<number | null>(null)
+
+// 启动定时器
+const startTimer = () => {
+  if (timerRef.value) return
+  if (!startTimeRef.value) {
+    startTimeRef.value = Date.now()
+  }
+  timerRef.value = window.setInterval(() => {
+    if (startTimeRef.value) {
+      elapsedTime.value = (Date.now() - startTimeRef.value) / 1000
+    }
+  }, 100)
+}
+
+// 停止定时器
+const stopTimer = () => {
+  if (timerRef.value) {
+    clearInterval(timerRef.value)
+    timerRef.value = null
+  }
+  startTimeRef.value = null
+  // 不重置 elapsedTime，保留最终时间
+}
+
+// 包装的 startTiming
+const wrappedStartTiming = () => {
+  if (!startTimeRef.value) {
+    startTimeRef.value = Date.now()
+  }
+  startTimer()
+}
+
+// 计算 WPM 和准确率
+const wpm = computed(() => {
+  if (elapsedTime.value === 0) return 0
+  const minutes = elapsedTime.value / 60
+  return Math.round(state.correctChars.value / minutes) || 0
+})
+
+const accuracy = computed(() => {
+  const total = state.correctChars.value + state.errorChars.value
+  if (total === 0) return 100
+  return Math.round((state.correctChars.value / total) * 100)
+})
+
+// 包装 resetStats 来停止定时器
+const wrappedResetStats = () => {
+  stopTimer()
+  elapsedTime.value = 0
+  resetStats()
+}
 
 // 计算已输入和待输入文本
 const typedText = computed(() => props.originalText.slice(0, cursorPosition.value))
@@ -98,7 +150,7 @@ watch(
     cursorPosition.value = 0
     hasError.value = false
     errorMsg.value = ''
-    resetStats()
+    wrappedResetStats()
     nextTick(() => updateEditorContent())
   },
   { immediate: true }
@@ -112,7 +164,7 @@ watch(
       if (!hasError.value) {
         recordCorrectChar()
       }
-      startTiming()
+      wrappedStartTiming()
     }
 
     const progress = props.originalText.length > 0 ? (newPos / props.originalText.length) * 100 : 0
@@ -121,11 +173,12 @@ watch(
     // 发出统计数据变化事件
     emit('stats-change', {
       elapsedTime: elapsedTime.value,
-      errors: state.totalErrors,
-      correctChars: state.correctChars,
+      errors: state.totalErrors.value,
+      correctChars: state.correctChars.value,
     })
 
     if (newPos === props.originalText.length && newPos > 0) {
+      stopTimer()
       emit('complete')
     }
 
@@ -285,13 +338,17 @@ onMounted(() => {
   updateEditorContent()
 })
 
+onUnmounted(() => {
+  stopTimer()
+})
+
 defineExpose({
   focusEditor,
   getCursorPosition: () => cursorPosition.value,
   getStats: () => ({
     elapsedTime: elapsedTime.value,
-    errors: state.totalErrors,
-    correctChars: state.correctChars,
+    errors: state.totalErrors.value,
+    correctChars: state.correctChars.value,
   }),
 })
 </script>
@@ -322,10 +379,14 @@ defineExpose({
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-content {
-  min-height: 200px;
+  flex: 1;
+  min-height: 0;
   padding: var(--spacing-lg);
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
@@ -338,7 +399,6 @@ defineExpose({
   outline: none;
   cursor: text;
   overflow-y: auto;
-  max-height: 400px;
 }
 
 .editor-content:focus {
