@@ -290,11 +290,12 @@ const handleCompositionEnd = (e: CompositionEvent) => {
 
   // 逐个字符检查
   let allCorrect = true
+  let errorIndex = -1
   for (let i = 0; i < inputText.length; i++) {
     const expectedChar = props.originalText[cursorPosition.value + i]
     if (inputText[i] !== expectedChar) {
       allCorrect = false
-      hasError.value = true
+      errorIndex = i
       recordError(cursorPosition.value + i)
       break
     }
@@ -304,6 +305,12 @@ const handleCompositionEnd = (e: CompositionEvent) => {
     hasError.value = false
     errorMsg.value = ''
     cursorPosition.value += inputText.length
+  } else {
+    // 显示错误信息
+    hasError.value = true
+    const expectedChar = props.originalText[cursorPosition.value + errorIndex]
+    const actualChar = inputText[errorIndex]
+    errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"`
   }
 
   nextTick(() => updateEditorContent())
@@ -381,7 +388,7 @@ defineExpose({
   font-family: var(--font-mono);
   font-size: var(--font-size-base);
   line-height: 1.8;
-  white-space: pre-wrap;
+  white-space: pre-line;
   word-break: break-all;
   outline: none;
   cursor: text;
@@ -394,6 +401,7 @@ defineExpose({
 
 .editor-content .typed-text {
   color: var(--text-primary);
+  text-indent: 0 !important;
 }
 
 .editor-content .cursor {

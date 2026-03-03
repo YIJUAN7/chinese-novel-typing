@@ -58,6 +58,7 @@ body {
 /* 编辑器文本样式（全局） */
 .typed-text {
   color: var(--text-primary);
+  text-indent: 0;
 }
 
 .pending-text {

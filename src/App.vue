@@ -46,18 +46,21 @@ const currentStats = ref({
 
 // 处理文本导入（包含章节解析）
 const handleImportText = (text: string) => {
+  // 格式化文本：去除中文空格（\u3000）和英文空格（ ），并去除首尾空白
+  const formattedText = text.replace(/[\u3000 ]/g, '')
+
   // 解析章节
-  const parsedChapters = parseChapters(text)
+  const parsedChapters = parseChapters(formattedText)
   console.log('解析到的章节数:', parsedChapters.length)
   console.log('章节列表:', parsedChapters.map(c => c.title))
   setChapters(parsedChapters)
 
-  // 保存小说文本
+  // 保存小说文本（使用格式化后的文本）
   const novelTitle = parsedChapters.length > 0
     ? `小说-${parsedChapters[0]?.title}-${new Date().toLocaleDateString('zh-CN')}`
     : `小说-${new Date().toLocaleDateString('zh-CN')}`
   const chapterTitles = parsedChapters.map(c => c.title)
-  saveNovel(novelTitle, text, chapterTitles)
+  saveNovel(novelTitle, formattedText, chapterTitles)
   currentNovelTitle.value = novelTitle
 
   // 如果有多个章节，显示第一章并恢复进度

@@ -36,9 +36,9 @@ const handleFileImport = async (e: Event) => {
     return
   }
 
-  // 验证文件大小（最大 5MB）
-  if (file.size > 5 * 1024 * 1024) {
-    errorMessage.value = '文件大小不能超过 5MB'
+  // 验证文件大小（最大 20MB）
+  if (file.size > 20 * 1024 * 1024) {
+    errorMessage.value = '文件大小不能超过 20MB'
     return
   }
 
