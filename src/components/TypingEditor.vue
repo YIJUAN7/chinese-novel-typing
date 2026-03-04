@@ -17,6 +17,7 @@ const isComposing = ref(false)
 const cursorPosition = ref(0)
 const hasError = ref(false)
 const errorMsg = ref('')
+const isFocused = ref(false)
 
 const {
   resetStats,
@@ -426,14 +427,15 @@ const handleCompositionEnd = (e: CompositionEvent) => {
   })
 }
 
-// 失去焦点时暂停计时
+// 失去焦点时暂停计时并隐藏光标
 const handleBlur = () => {
+  isFocused.value = false
   pauseTimer()
 }
 
-// 获得焦点时不自动恢复计时，等用户输入时才恢复
+// 获得焦点时显示光标
 const handleFocus = () => {
-  // 不自动恢复计时
+  isFocused.value = true
 }
 
 // 阻止粘贴
@@ -447,6 +449,10 @@ const focusEditor = () => {
 
 onMounted(() => {
   updateEditorContent()
+  // 组件挂载后自动聚焦
+  nextTick(() => {
+    focusEditor()
+  })
 })
 
 onUnmounted(() => {
@@ -472,6 +478,7 @@ defineExpose({
 <template>
   <div class="typing-editor" @click="focusEditor">
     <div class="editor-content" ref="editorRef" contenteditable="true"
+      :class="{ 'is-focused': isFocused }"
       @input="handleEditorInput"
       @compositionstart="handleCompositionStart"
       @compositionupdate="handleCompositionUpdate"
@@ -533,20 +540,25 @@ defineExpose({
 .editor-content .cursor {
   display: inline-block;
   color: transparent;
-  animation: blink 1s infinite;
   font-weight: bold;
   position: relative;
   width: 1ch;
   white-space: nowrap;
 }
 
-/* 使用 ::before 伪元素显示光标 */
+/* 使用 ::before 伪元素显示光标，只在聚焦时显示 */
 .editor-content .cursor::before {
   content: '|';
   color: var(--cursor-color);
   position: absolute;
   left: 0;
   top: 0;
+  opacity: 0;
+}
+
+.editor-content.is-focused .cursor::before {
+  opacity: 1;
+  animation: blink 1s infinite;
 }
 
 .editor-content .cursor.error {

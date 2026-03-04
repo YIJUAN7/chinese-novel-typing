@@ -396,6 +396,10 @@ watch(
 // 监听键盘事件（完成状态下按任意键开始下一章）
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
+  // 页面加载时自动聚焦到输入区域
+  nextTick(() => {
+    editorRef.value?.focusEditor()
+  })
 })
 
 onUnmounted(() => {
