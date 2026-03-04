@@ -31,19 +31,7 @@ let isUpdating = false
 const elapsedTime = ref(0)
 const timerRef = ref<number | null>(null)
 const startTimeRef = ref<number | null>(null)
-
-// 启动定时器
-const startTimer = () => {
-  if (timerRef.value) return
-  if (!startTimeRef.value) {
-    startTimeRef.value = Date.now()
-  }
-  timerRef.value = window.setInterval(() => {
-    if (startTimeRef.value) {
-      elapsedTime.value = (Date.now() - startTimeRef.value) / 1000
-    }
-  }, 100)
-}
+const accumulatedTimeRef = ref(0) // 累计暂停前经过的时间
 
 // 停止定时器
 const stopTimer = () => {
@@ -55,12 +43,30 @@ const stopTimer = () => {
   // 不重置 elapsedTime，保留最终时间
 }
 
-// 包装的 startTiming
-const wrappedStartTiming = () => {
-  if (!startTimeRef.value) {
-    startTimeRef.value = Date.now()
+// 暂停定时器（失去焦点时调用）
+const pauseTimer = () => {
+  if (timerRef.value && startTimeRef.value) {
+    // 保存当前已过去的时间
+    accumulatedTimeRef.value += (Date.now() - startTimeRef.value) / 1000
+    clearInterval(timerRef.value)
+    timerRef.value = null
+    startTimeRef.value = null
+    // 更新最终时间显示
+    elapsedTime.value = accumulatedTimeRef.value
   }
-  startTimer()
+}
+
+// 恢复定时器（获得焦点时调用）
+const resumeTimer = () => {
+  if (!timerRef.value && !startTimeRef.value) {
+    // 重新开始计时
+    startTimeRef.value = Date.now()
+    timerRef.value = window.setInterval(() => {
+      if (startTimeRef.value) {
+        elapsedTime.value = accumulatedTimeRef.value + (Date.now() - startTimeRef.value) / 1000
+      }
+    }, 100)
+  }
 }
 
 // 计算 WPM 和准确率
@@ -128,6 +134,82 @@ const placeCaretAfterCursor = () => {
   }
 }
 
+// 自动滚动逻辑：当光标超过可视区域中间时，向下滚动
+const autoScrollToCursor = () => {
+  if (!editorRef.value) return
+
+  const cursorNode = editorRef.value.querySelector('.cursor')
+  if (!cursorNode) return
+
+  const editorRect = editorRef.value.getBoundingClientRect()
+  const cursorRect = cursorNode.getBoundingClientRect()
+
+  // 计算编辑器可视区域的中间位置
+  const editorMidpoint = editorRect.top + editorRect.height / 2
+
+  // 如果光标位置超过中间位置，且还有待输入的内容，就向下滚动
+  if (cursorRect.top > editorMidpoint) {
+    // 检查是否还有待输入的内容
+    const hasPendingContent = pendingText.value.length > 0
+    if (!hasPendingContent) {
+      return
+    }
+
+    // 计算需要滚动的距离，使光标位于中间位置
+    const scrollDelta = cursorRect.top - editorMidpoint
+    editorRef.value.scrollTop += scrollDelta
+  }
+}
+
+// 中英文符号映射表（中文 -> 英文）
+const punctuationMap: Record<string, string> = {
+  '\uff0c': ',',  // ，
+  '\u3002': '.',  // 。
+  '\uff1b': ';',  // ；
+  '\uff1a': ':',  // ：
+  '\uff1f': '?',  // ？
+  '\uff01': '!',  // ！
+  '\u2018': "'",  // '
+  '\u2019': "'",  // '
+  '\u201c': '"',  // "
+  '\u201d': '"',  // "
+  '\uff08': '(',  // （
+  '\uff09': ')',  // ）
+  '\u3010': '[',  // 【
+  '\u3011': ']',  // 】
+  '\uff5b': '{',  // ｛
+  '\uff5d': '}',  // ｝
+  '\u3001': ',',  // 、
+  '\u2014': '-',  // —
+  '\uff5e': '~',  // ～
+  '\uff20': '@',  // ＠
+  '\uff03': '#',  // ＃
+  '\uff04': '$',  // ＄
+  '\uff05': '%',  // ％
+  '\uff3e': '^',  // ＾
+  '\uff06': '&',  // ＆
+  '\uff0a': '*',  // ＊
+  '\uff0d': '-',  // －
+  '\uff0b': '+',  // ＋
+  '\uff1d': '=',  // ＝
+  '\uff5c': '|',  // ｜
+  '\uff3c': '\\', // ＼
+  '\uff0f': '/',  // ／
+  '\u3008': '<',  // 〈
+  '\u3009': '>',  // 〉
+  '\u300a': '<',  // 《
+  '\u300b': '>',  // 》
+  '\u300c': '[',  // 「
+  '\u300d': ']',  // 」
+  '\u300e': '[',  // 『
+  '\u300f': ']',  // 』
+}
+
+// 规范化字符：将中文符号转换为英文符号
+const normalizeChar = (char: string): string => {
+  return punctuationMap[char] || char
+}
+
 // 监听原文变化
 watch(
   () => props.originalText,
@@ -149,7 +231,8 @@ watch(
       if (!hasError.value) {
         recordCorrectChar()
       }
-      wrappedStartTiming()
+      // 只在有实际输入时才恢复/启动计时
+      resumeTimer()
     }
 
     const progress = props.originalText.length > 0 ? (newPos / props.originalText.length) * 100 : 0
@@ -168,7 +251,11 @@ watch(
     }
 
     if (!isUpdating) {
-      nextTick(() => updateEditorContent())
+      nextTick(() => {
+        updateEditorContent()
+        // 内容更新后执行自动滚动
+        nextTick(() => autoScrollToCursor())
+      })
     }
   }
 )
@@ -180,12 +267,6 @@ const handleEditorInput = (e: Event) => {
   e.preventDefault()
 
   const inputType = (e as InputEvent).inputType
-
-  // 处理删除操作（虽然我们阻止了，但以防万一）
-  if (inputType?.includes('delete')) {
-    nextTick(() => updateEditorContent())
-    return
-  }
 
   // 获取用户输入的字符（可能是换行符）
   let data = (e as InputEvent).data
@@ -200,21 +281,43 @@ const handleEditorInput = (e: Event) => {
     return
   }
 
-  // 检查输入的字符是否正确
+  // 检查是否输入了万能符 '*'，如果是则直接跳过当前字符
+  if (data === '*') {
+    hasError.value = false
+    errorMsg.value = ''
+    cursorPosition.value++
+    nextTick(() => {
+      updateEditorContent()
+      nextTick(() => autoScrollToCursor())
+    })
+    return
+  }
+
+  // 处理删除操作（虽然我们阻止了，但以防万一）
+  if (inputType?.includes('delete')) {
+    nextTick(() => updateEditorContent())
+    return
+  }
+
+  // 检查输入的字符是否正确（不区分中英文符号）
   const expectedChar = props.originalText[cursorPosition.value]
   const actualChar = data
 
-  if (actualChar !== expectedChar) {
+  // 规范化字符后进行比较
+  const normalizedExpected = normalizeChar(expectedChar || '')
+  const normalizedActual = normalizeChar(actualChar || '')
+
+  if (normalizedActual !== normalizedExpected) {
     // 输入错误
     hasError.value = true
-    errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"`
+    errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"（输入 * 跳过）`
     recordError(cursorPosition.value)
     // 不更新光标位置
     nextTick(() => {
       updateEditorContent()
     })
   } else {
-    // 输入正确
+    // 输入正确（包括中英文符号混用情况）
     hasError.value = false
     errorMsg.value = ''
     cursorPosition.value++
@@ -288,12 +391,14 @@ const handleCompositionEnd = (e: CompositionEvent) => {
   const inputText = e.data
   if (!inputText) return
 
-  // 逐个字符检查
+  // 逐个字符检查（不区分中英文符号）
   let allCorrect = true
   let errorIndex = -1
   for (let i = 0; i < inputText.length; i++) {
     const expectedChar = props.originalText[cursorPosition.value + i]
-    if (inputText[i] !== expectedChar) {
+    const actualChar = inputText[i]
+    // 规范化字符后进行比较
+    if (normalizeChar(actualChar || '') !== normalizeChar(expectedChar || '')) {
       allCorrect = false
       errorIndex = i
       recordError(cursorPosition.value + i)
@@ -310,10 +415,23 @@ const handleCompositionEnd = (e: CompositionEvent) => {
     hasError.value = true
     const expectedChar = props.originalText[cursorPosition.value + errorIndex]
     const actualChar = inputText[errorIndex]
-    errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"`
+    errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"（输入 * 跳过）`
   }
 
-  nextTick(() => updateEditorContent())
+  nextTick(() => {
+    updateEditorContent()
+    nextTick(() => autoScrollToCursor())
+  })
+}
+
+// 失去焦点时暂停计时
+const handleBlur = () => {
+  pauseTimer()
+}
+
+// 获得焦点时不自动恢复计时，等用户输入时才恢复
+const handleFocus = () => {
+  // 不自动恢复计时
 }
 
 // 阻止粘贴
@@ -356,6 +474,8 @@ defineExpose({
       @compositionend="handleCompositionEnd"
       @keydown="handleKeyDown"
       @paste="handlePaste"
+      @blur="handleBlur"
+      @focus="handleFocus"
       spellcheck="false">
     </div>
 
@@ -382,6 +502,7 @@ defineExpose({
   flex: 1;
   min-height: 0;
   padding: var(--spacing-lg);
+  padding-left: calc(var(--spacing-lg) + 2em);
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
@@ -393,6 +514,7 @@ defineExpose({
   outline: none;
   cursor: text;
   overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .editor-content:focus {

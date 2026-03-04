@@ -72,6 +72,14 @@ const handleImportText = (text: string) => {
     console.log('第一章内容长度:', firstChapter.content.length)
     originalText.value = firstChapter.content
 
+    // 重置编辑器滚动位置到顶部
+    nextTick(() => {
+      const editorElement = document.querySelector('.editor-content')
+      if (editorElement) {
+        editorElement.scrollTop = 0
+      }
+    })
+
     // 恢复该小说的进度
     const savedProgress = getNovelProgress(novelTitle)
     if (savedProgress) {
@@ -192,6 +200,14 @@ const handleNextOrReset = () => {
         selectChapter(nextIndex)
         originalText.value = nextChapter.content
 
+        // 重置编辑器滚动位置到顶部
+        nextTick(() => {
+          const editorElement = document.querySelector('.editor-content')
+          if (editorElement) {
+            editorElement.scrollTop = 0
+          }
+        })
+
         // 检查该小说是否有已保存的进度
         const savedProgress = getNovelProgress(currentNovelTitle.value)
         if (savedProgress && savedProgress.cursorPosition > 0 && savedProgress.chapterIndex === nextIndex) {
@@ -255,6 +271,14 @@ const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) =>
 
       originalText.value = firstChapter.content
 
+      // 重置编辑器滚动位置到顶部
+      nextTick(() => {
+        const editorElement = document.querySelector('.editor-content')
+        if (editorElement) {
+          editorElement.scrollTop = 0
+        }
+      })
+
       // 恢复该小说的进度
       const savedProgress = getNovelProgress(novel.title)
       if (savedProgress) {
@@ -311,6 +335,14 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
   isComplete.value = false
   progress.value = 0
   currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+
+  // 重置编辑器滚动位置到顶部
+  nextTick(() => {
+    const editorElement = document.querySelector('.editor-content')
+    if (editorElement) {
+      editorElement.scrollTop = 0
+    }
+  })
 
   // 恢复该小说的进度（检查是否是该章节）
   if (currentNovelTitle.value) {
@@ -377,6 +409,7 @@ onUnmounted(() => {
 
     <main class="app-main">
       <ControlBar
+        :chapter-count="chapters.length"
         @import-text="handleImportText"
         @reset="handleReset"
         @start="handleStart"
@@ -438,12 +471,12 @@ onUnmounted(() => {
       @close="closeChapterList"
     />
 
-    <!-- 已保存小说列表 -->
+    <!-- 小说列表 -->
     <div v-if="isSavedNovelsOpen" class="modal-overlay" @click.self="isSavedNovelsOpen = false">
       <div class="saved-novels-modal">
         <div class="modal-header">
-          <h2>📚 已保存的小说</h2>
-          <button class="btn-close" @click="isSavedNovelsOpen = false">×</button>
+          <h2>📚 小说列表</h2>
+          <button class="close-btn" @click="isSavedNovelsOpen = false">×</button>
         </div>
         <div class="modal-body">
           <div v-if="getSavedNovels().length === 0" class="empty-state">
@@ -673,6 +706,27 @@ onUnmounted(() => {
   margin: 0;
 }
 
+/* 小说列表关闭按钮样式 - 与章节列表一致 */
+.saved-novels-modal .close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  transition: background-color 0.2s;
+}
+
+.saved-novels-modal .close-btn:hover {
+  background-color: var(--bg-tertiary);
+}
+
 .saved-novels-modal .modal-body {
   padding: var(--spacing-lg);
   overflow-y: auto;
@@ -750,5 +804,20 @@ onUnmounted(() => {
 
 .btn-danger:hover {
   background-color: var(--color-error-dark);
+}
+
+/* 小说列表弹窗遮罩层 - 居中显示 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
 }
 </style>

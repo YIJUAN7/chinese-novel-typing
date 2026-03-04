@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
+const props = defineProps<{
+  chapterCount: number
+}>()
+
 const emit = defineEmits<{
   (e: 'import-text', text: string): void
   (e: 'reset'): void
@@ -13,6 +17,7 @@ const showModal = ref(false)
 const inputText = ref('')
 const isUploading = ref(false)
 const errorMessage = ref('')
+const showNoChapterToast = ref(false)
 
 const handleImport = () => {
   if (inputText.value.trim()) {
@@ -76,6 +81,15 @@ const handleReset = () => {
 }
 
 const handleOpenChapterList = () => {
+  // 检查是否有章节内容
+  if (props.chapterCount === 0) {
+    showNoChapterToast.value = true
+    // 3 秒后自动关闭提示
+    setTimeout(() => {
+      showNoChapterToast.value = false
+    }, 3000)
+    return
+  }
   emit('open-chapter-list')
 }
 
@@ -94,11 +108,11 @@ const handleOpenSavedNovels = () => {
         📁 从文件导入
         <input type="file" accept=".txt" @change="handleFileImport" hidden />
       </label>
+      <button class="btn btn-secondary" @click="handleOpenSavedNovels">
+        📚 小说列表
+      </button>
       <button class="btn btn-secondary" @click="handleOpenChapterList">
         📑 章节列表
-      </button>
-      <button class="btn btn-secondary" @click="handleOpenSavedNovels">
-        📚 已保存
       </button>
     </div>
 
@@ -116,6 +130,12 @@ const handleOpenSavedNovels = () => {
   <div v-if="errorMessage" class="error-toast">
     {{ errorMessage }}
     <button class="toast-close" @click="errorMessage = ''">×</button>
+  </div>
+
+  <!-- 无章节提示 -->
+  <div v-if="showNoChapterToast" class="info-toast">
+    请先导入文本或从小说列表加载小说
+    <button class="toast-close" @click="showNoChapterToast = false">×</button>
   </div>
 
   <!-- 导入文本弹窗 -->
@@ -293,6 +313,23 @@ const handleOpenSavedNovels = () => {
   left: 50%;
   transform: translateX(-50%);
   background-color: var(--color-error);
+  color: white;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  z-index: 2000;
+  animation: slideDown 0.3s ease;
+}
+
+.info-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: var(--color-primary);
   color: white;
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
