@@ -37,6 +37,12 @@ const { saveNovelProgress, getNovelProgress, saveNovel, getSavedNovels, loadNove
 // 当前小说标题（用于进度保存）
 const currentNovelTitle = ref('')
 
+// 截断标题到最多 15 个字
+const truncateTitle = (title: string) => {
+  if (!title) return ''
+  return title.length > 15 ? title.slice(0, 15) + '...' : title
+}
+
 // 当前统计数据
 const currentStats = ref({
   elapsedTime: 0,
@@ -47,7 +53,7 @@ const currentStats = ref({
 })
 
 // 处理文本导入（包含章节解析）
-const handleImportText = (text: string) => {
+const handleImportText = (text: string, fileName?: string) => {
   // 格式化文本：去除中文空格（\u3000）和英文空格（ ），并去除首尾空白
   const formattedText = text.replace(/[\u3000 ]/g, '')
 
@@ -58,9 +64,12 @@ const handleImportText = (text: string) => {
   setChapters(parsedChapters)
 
   // 保存小说文本（使用格式化后的文本）
-  const novelTitle = parsedChapters.length > 0
-    ? `小说-${parsedChapters[0]?.title}-${new Date().toLocaleDateString('zh-CN')}`
-    : `小说-${new Date().toLocaleDateString('zh-CN')}`
+  // 优先使用文件名作为小说名，如果没有文件名则使用章节名
+  const novelTitle = fileName
+    ? `${fileName}-${new Date().toLocaleDateString('zh-CN')}`
+    : parsedChapters.length > 0
+      ? `小说-${parsedChapters[0]?.title}-${new Date().toLocaleDateString('zh-CN')}`
+      : `小说-${new Date().toLocaleDateString('zh-CN')}`
   const chapterTitles = parsedChapters.map(c => c.title)
   saveNovel(novelTitle, formattedText, chapterTitles)
   currentNovelTitle.value = novelTitle
@@ -410,7 +419,7 @@ onUnmounted(() => {
 <template>
   <div class="app">
     <header class="app-header">
-      <h1>{{ currentChapterTitle || '小说跟打器' }}</h1>
+      <h1>{{ truncateTitle(currentChapterTitle) || '小说跟打器' }}</h1>
     </header>
 
     <main class="app-main">

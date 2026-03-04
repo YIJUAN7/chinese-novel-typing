@@ -6,7 +6,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'import-text', text: string): void
+  (e: 'import-text', text: string, fileName?: string): void
   (e: 'reset'): void
   (e: 'open-chapter-list'): void
   (e: 'open-saved-novels'): void
@@ -55,7 +55,9 @@ const handleFileImport = async (e: Event) => {
       let text = event.target?.result as string
       // 标准化换行符
       text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-      emit('import-text', text.trim())
+      // 传递文件名（不含扩展名）
+      const fileName = file.name.replace(/\.txt$/i, '')
+      emit('import-text', text.trim(), fileName)
       isUploading.value = false
     }
     reader.onerror = () => {
