@@ -11,7 +11,7 @@ import { useProgressStorage } from './composables/useProgressStorage'
 const isSavedNovelsOpen = ref(false)
 
 // 默认示例文本
-const defaultText = `那是一个很好的时代，那是一个糟糕的时代；那是一个智慧的年代，那是一个愚昧的年代。`
+const defaultText = `多年以后，奥雷连诺上校站在行刑队面前，准会想起父亲带他去参观冰块的那个遥远的下午。`
 
 const originalText = ref(defaultText)
 const progress = ref(0)
@@ -42,6 +42,8 @@ const currentStats = ref({
   elapsedTime: 0,
   errors: 0,
   correctChars: 0,
+  wpm: 0,
+  accuracy: 100,
 })
 
 // 处理文本导入（包含章节解析）
@@ -111,6 +113,8 @@ const handleImportText = (text: string) => {
             elapsedTime: savedProgress.elapsedTime,
             errors: savedProgress.errors,
             correctChars: savedProgress.correctChars,
+            wpm: 0,
+            accuracy: 100,
           }
         })
       }
@@ -121,14 +125,14 @@ const handleImportText = (text: string) => {
 
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
 }
 
 const handleProgress = (value: number) => {
   progress.value = value
 }
 
-const handleStatsChange = (stats: { elapsedTime: number; errors: number; correctChars: number }) => {
+const handleStatsChange = (stats: { elapsedTime: number; errors: number; correctChars: number; wpm: number; accuracy: number }) => {
   currentStats.value = stats
 
   // 实时更新进度保存（每本小说只保留一个最新进度）
@@ -166,7 +170,7 @@ const handleComplete = () => {
 const handleReset = () => {
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
 
   // 重置编辑器状态（触发原文变化以重置内部状态）
   const currentText = originalText.value
@@ -220,6 +224,8 @@ const handleNextOrReset = () => {
                 elapsedTime: savedProgress.elapsedTime,
                 errors: savedProgress.errors,
                 correctChars: savedProgress.correctChars,
+                wpm: 0,
+                accuracy: 100,
               }
             })
             return // 如果恢复进度，直接返回
@@ -231,7 +237,7 @@ const handleNextOrReset = () => {
 
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -239,10 +245,6 @@ const handleKeydown = (e: KeyboardEvent) => {
     e.preventDefault()
     handleNextOrReset()
   }
-}
-
-const handleStart = () => {
-  editorRef.value?.focusEditor()
 }
 
 const handleOpenChapterList = () => {
@@ -307,6 +309,8 @@ const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) =>
                 elapsedTime: savedProgress.elapsedTime,
                 errors: savedProgress.errors,
                 correctChars: savedProgress.correctChars,
+                wpm: 0,
+                accuracy: 100,
               }
             })
           }
@@ -318,7 +322,7 @@ const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) =>
 
     isComplete.value = false
     progress.value = 0
-    currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+    currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
     isSavedNovelsOpen.value = false
   }
 }
@@ -334,7 +338,7 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
   originalText.value = chapter.content
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
 
   // 重置编辑器滚动位置到顶部
   nextTick(() => {
@@ -361,6 +365,8 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
             elapsedTime: savedProgress.elapsedTime,
             errors: savedProgress.errors,
             correctChars: savedProgress.correctChars,
+            wpm: 0,
+            accuracy: 100,
           }
         })
       }
@@ -400,11 +406,7 @@ onUnmounted(() => {
 <template>
   <div class="app">
     <header class="app-header">
-      <h1>小说跟打器</h1>
-      <p class="subtitle">
-        <span v-if="currentChapterTitle">当前章节：{{ currentChapterTitle }}</span>
-        <span v-else>在光标后显示待输入文本的创新打字练习工具</span>
-      </p>
+      <h1>{{ currentChapterTitle || '小说跟打器' }}</h1>
     </header>
 
     <main class="app-main">
@@ -412,7 +414,6 @@ onUnmounted(() => {
         :chapter-count="chapters.length"
         @import-text="handleImportText"
         @reset="handleReset"
-        @start="handleStart"
         @open-chapter-list="handleOpenChapterList"
         @open-saved-novels="handleOpenSavedNovels"
       />
@@ -447,15 +448,15 @@ onUnmounted(() => {
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-value">{{ currentStats.elapsedTime.toFixed(1) }}s</div>
-            <div class="stat-label">用时</div>
+            <div class="stat-label">时间</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">{{ currentStats.errors }}</div>
-            <div class="stat-label">错误</div>
+            <div class="stat-value">{{ currentStats.wpm }} 字/分</div>
+            <div class="stat-label">速度</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">{{ currentStats.correctChars }}</div>
-            <div class="stat-label">正确字数</div>
+            <div class="stat-value">{{ currentStats.accuracy }}%</div>
+            <div class="stat-label">准确率</div>
           </div>
         </div>
         <p class="modal-tip-text">按任意键开始下一章</p>
@@ -509,6 +510,9 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 作者信息 -->
+    <footer class="app-footer">by 寒号鸟</footer>
   </div>
 </template>
 
@@ -533,12 +537,6 @@ onUnmounted(() => {
   font-size: 22px;
   color: var(--color-primary);
   margin: 0;
-}
-
-.subtitle {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 4px 0 0;
 }
 
 .app-main {
@@ -819,5 +817,15 @@ onUnmounted(() => {
   justify-content: center;
   z-index: 1000;
   animation: fadeIn 0.2s ease;
+}
+
+/* 作者信息 */
+.app-footer {
+  position: fixed;
+  bottom: 8px;
+  right: 16px;
+  font-size: 12px;
+  color: #999;
+  user-select: none;
 }
 </style>

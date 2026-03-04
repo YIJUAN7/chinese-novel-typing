@@ -150,11 +150,13 @@ export const useProgressStorage = () => {
   }
 
   /**
-   * 删除指定小说
+   * 删除指定小说（同时删除对应进度）
    */
   const deleteNovel = (title: string) => {
     savedNovels.value = savedNovels.value.filter(n => n.title !== title)
     persistNovelsToStorage()
+    // 同步删除该小说的进度
+    deleteNovelProgress(title)
   }
 
   /**

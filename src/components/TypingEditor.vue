@@ -9,7 +9,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'progress', progress: number): void
   (e: 'complete'): void
-  (e: 'stats-change', stats: { elapsedTime: number; errors: number; correctChars: number }): void
+  (e: 'stats-change', stats: { elapsedTime: number; errors: number; correctChars: number; wpm: number; accuracy: number }): void
 }>()
 
 const editorRef = ref<HTMLElement | null>(null)
@@ -243,6 +243,8 @@ watch(
       elapsedTime: elapsedTime.value,
       errors: state.totalErrors.value,
       correctChars: state.correctChars.value,
+      wpm: wpm.value,
+      accuracy: accuracy.value,
     })
 
     if (newPos === props.originalText.length && newPos > 0) {
@@ -461,6 +463,8 @@ defineExpose({
     elapsedTime: elapsedTime.value,
     errors: state.totalErrors.value,
     correctChars: state.correctChars.value,
+    wpm: wpm.value,
+    accuracy: accuracy.value,
   }),
 })
 </script>

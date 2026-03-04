@@ -8,7 +8,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'import-text', text: string): void
   (e: 'reset'): void
-  (e: 'start'): void
   (e: 'open-chapter-list'): void
   (e: 'open-saved-novels'): void
 }>()
@@ -72,10 +71,6 @@ const handleFileImport = async (e: Event) => {
   target.value = ''
 }
 
-const handleStart = () => {
-  emit('start')
-}
-
 const handleReset = () => {
   emit('reset')
 }
@@ -117,9 +112,6 @@ const handleOpenSavedNovels = () => {
     </div>
 
     <div class="control-group">
-      <button class="btn btn-primary" @click="handleStart">
-        ▶️ 开始
-      </button>
       <button class="btn btn-secondary" @click="handleReset">
         🔄 重置
       </button>
