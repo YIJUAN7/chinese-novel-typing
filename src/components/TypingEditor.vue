@@ -228,11 +228,18 @@ watch(
 watch(
   () => cursorPosition.value,
   (newPos, oldPos) => {
-    if (newPos > oldPos) {
-      if (!hasError.value) {
+    // 只在没有错误且位置前进时才记录正确字符
+    // 注意：hasError 可能在此处已经被设置为 true（部分匹配情况），所以不重复记录
+    if (newPos > oldPos && !hasError.value) {
+      // 根据前进的字符数记录正确字符
+      const charsAdvanced = newPos - oldPos
+      for (let i = 0; i < charsAdvanced; i++) {
         recordCorrectChar()
       }
       // 只在有实际输入时才恢复/启动计时
+      resumeTimer()
+    } else if (hasError.value && newPos > oldPos) {
+      // 部分匹配后前进到有错误的位置，仍然需要恢复计时器
       resumeTimer()
     }
 
@@ -302,30 +309,55 @@ const handleEditorInput = (e: Event) => {
     return
   }
 
-  // 检查输入的字符是否正确（不区分中英文符号）
-  const expectedChar = props.originalText[cursorPosition.value]
-  const actualChar = data
+  // 多字符词组匹配：向后检查是否完全匹配
+  const inputText = data
+  let matchLength = 0
 
-  // 规范化字符后进行比较
-  const normalizedExpected = normalizeChar(expectedChar || '')
-  const normalizedActual = normalizeChar(actualChar || '')
+  // 逐个字符检查输入是否与原文匹配（不区分中英文符号）
+  for (let i = 0; i < inputText.length; i++) {
+    const expectedChar = props.originalText[cursorPosition.value + i]
+    const actualChar = inputText[i]
+    const normalizedExpected = normalizeChar(expectedChar || '')
+    const normalizedActual = normalizeChar(actualChar || '')
 
-  if (normalizedActual !== normalizedExpected) {
-    // 输入错误
+    if (normalizedActual !== normalizedExpected) {
+      break
+    }
+    matchLength++
+  }
+
+  if (matchLength === 0) {
+    // 完全错误
     hasError.value = true
+    const expectedChar = props.originalText[cursorPosition.value]
+    const actualChar = inputText[0]
     errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"（输入 * 跳过）`
     recordError(cursorPosition.value)
-    // 不更新光标位置
     nextTick(() => {
       updateEditorContent()
     })
-  } else {
-    // 输入正确（包括中英文符号混用情况）
+  } else if (matchLength === inputText.length) {
+    // 全部匹配，一次性前进多个字符
     hasError.value = false
     errorMsg.value = ''
-    cursorPosition.value++
+    cursorPosition.value += matchLength
     nextTick(() => {
       updateEditorContent()
+      nextTick(() => autoScrollToCursor())
+    })
+  } else {
+    // 部分匹配：只前进匹配的字符，错误字符不前进
+    hasError.value = true // 设置为错误状态以显示错误提示
+    errorMsg.value = ''
+    cursorPosition.value += matchLength
+    // 记录错误（在光标位置移动后设置错误信息）
+    const expectedChar = props.originalText[cursorPosition.value]
+    const actualChar = inputText[matchLength]
+    errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"（输入 * 跳过）`
+    recordError(cursorPosition.value)
+    nextTick(() => {
+      updateEditorContent()
+      nextTick(() => autoScrollToCursor())
     })
   }
 }
@@ -394,31 +426,44 @@ const handleCompositionEnd = (e: CompositionEvent) => {
   const inputText = e.data
   if (!inputText) return
 
+  // 多字符词组匹配：向后检查是否完全匹配
+  let matchLength = 0
+
   // 逐个字符检查（不区分中英文符号）
-  let allCorrect = true
-  let errorIndex = -1
   for (let i = 0; i < inputText.length; i++) {
     const expectedChar = props.originalText[cursorPosition.value + i]
     const actualChar = inputText[i]
-    // 规范化字符后进行比较
-    if (normalizeChar(actualChar || '') !== normalizeChar(expectedChar || '')) {
-      allCorrect = false
-      errorIndex = i
-      recordError(cursorPosition.value + i)
+    const normalizedExpected = normalizeChar(expectedChar || '')
+    const normalizedActual = normalizeChar(actualChar || '')
+
+    if (normalizedActual !== normalizedExpected) {
       break
     }
+    matchLength++
   }
 
-  if (allCorrect) {
+  if (matchLength === 0) {
+    // 完全错误
+    hasError.value = true
+    const expectedChar = props.originalText[cursorPosition.value]
+    const actualChar = inputText[0]
+    errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"（输入 * 跳过）`
+    recordError(cursorPosition.value)
+  } else if (matchLength === inputText.length) {
+    // 全部匹配，一次性前进多个字符
     hasError.value = false
     errorMsg.value = ''
-    cursorPosition.value += inputText.length
+    cursorPosition.value += matchLength
   } else {
-    // 显示错误信息
-    hasError.value = true
-    const expectedChar = props.originalText[cursorPosition.value + errorIndex]
-    const actualChar = inputText[errorIndex]
+    // 部分匹配：只前进匹配的字符
+    hasError.value = true // 设置为错误状态以显示错误提示
+    errorMsg.value = ''
+    cursorPosition.value += matchLength
+    // 设置错误信息
+    const expectedChar = props.originalText[cursorPosition.value]
+    const actualChar = inputText[matchLength]
     errorMsg.value = `期望输入 "${expectedChar}"，但输入了 "${actualChar}"（输入 * 跳过）`
+    recordError(cursorPosition.value)
   }
 
   nextTick(() => {
