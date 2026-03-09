@@ -16,7 +16,7 @@ export interface StatsResult {
   resetStats: () => void
   recordError: (position: number) => void
   recordCorrectChar: () => void
-  initStats: (initialCorrectChars: number) => void
+  initStats: (initialCorrectChars: number, initialElapsedTime?: number, initialErrors?: number) => void
 }
 
 export function useStats(): StatsResult {
@@ -62,8 +62,10 @@ export function useStats(): StatsResult {
     correctChars.value++
   }
 
-  const initStats = (initialCorrectChars: number) => {
+  const initStats = (initialCorrectChars: number, initialElapsedTime: number = 0, initialErrors: number = 0) => {
     correctChars.value = initialCorrectChars
+    elapsed.value = initialElapsedTime
+    totalErrors.value = initialErrors
   }
 
   return {

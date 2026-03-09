@@ -104,8 +104,8 @@ const wrappedResetStats = () => {
 }
 
 // 初始化统计状态（用于恢复进度时）
-const initStatsState = (correctChars: number, elapsedTimeSec: number) => {
-  initStats(correctChars)
+const initStatsState = (correctChars: number, elapsedTimeSec: number, errors: number = 0) => {
+  initStats(correctChars, elapsedTimeSec, errors)
   elapsedTime.value = elapsedTimeSec
   accumulatedTimeRef.value = elapsedTimeSec
 }
@@ -536,8 +536,8 @@ defineExpose({
   setCursorPosition: (pos: number) => {
     cursorPosition.value = pos
   },
-  initStats: (correctChars: number, elapsedTimeSec: number) => {
-    initStatsState(correctChars, elapsedTimeSec)
+  initStats: (correctChars: number, elapsedTimeSec: number, errors: number = 0) => {
+    initStatsState(correctChars, elapsedTimeSec, errors)
   },
   getStats: () => ({
     elapsedTime: elapsedTime.value,

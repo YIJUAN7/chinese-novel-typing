@@ -116,15 +116,15 @@ const handleImportText = (text: string, fileName?: string) => {
       if (resume) {
         nextTick(() => {
           editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
-          // 初始化统计状态：时间恢复，正确字符数设为光标位置（已打字符数）
-          editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
+          // 初始化统计状态：时间恢复，正确字符数设为光标位置，错误数恢复
+          editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime, savedProgress.errors)
           progress.value = (savedProgress.cursorPosition / targetChapter.content.length) * 100
           currentStats.value = {
             elapsedTime: savedProgress.elapsedTime,
             errors: savedProgress.errors,
             correctChars: savedProgress.cursorPosition,
             wpm: 0,
-            
+
           }
         })
       }
@@ -229,15 +229,15 @@ const handleNextOrReset = () => {
           if (resume) {
             nextTick(() => {
               editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
-              // 初始化统计状态：时间恢复，正确字符数设为光标位置
-              editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
+              // 初始化统计状态：时间恢复，正确字符数设为光标位置，错误数恢复
+              editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime, savedProgress.errors)
               progress.value = (savedProgress.cursorPosition / nextChapter.content.length) * 100
               currentStats.value = {
                 elapsedTime: savedProgress.elapsedTime,
                 errors: savedProgress.errors,
                 correctChars: savedProgress.cursorPosition,
                 wpm: 0,
-                
+
               }
             })
             return // 如果恢复进度，直接返回
@@ -316,15 +316,15 @@ const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) =>
           if (resume) {
             nextTick(() => {
               editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
-              // 初始化统计状态：时间恢复，正确字符数设为光标位置
-              editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
+              // 初始化统计状态：时间恢复，正确字符数设为光标位置，错误数恢复
+              editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime, savedProgress.errors)
               progress.value = (savedProgress.cursorPosition / originalText.value.length) * 100
               currentStats.value = {
                 elapsedTime: savedProgress.elapsedTime,
                 errors: savedProgress.errors,
                 correctChars: savedProgress.cursorPosition,
                 wpm: 0,
-                
+
               }
             })
           }
@@ -372,8 +372,8 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
         // 设置编辑器光标位置
         nextTick(() => {
           editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
-          // 初始化统计状态：时间恢复，正确字符数设为光标位置
-          editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
+          // 初始化统计状态：时间恢复，正确字符数设为光标位置，错误数恢复
+          editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime, savedProgress.errors)
           // 更新进度条
           progress.value = (savedProgress.cursorPosition / chapter.content.length) * 100
           // 恢复统计数据
@@ -382,7 +382,7 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
             errors: savedProgress.errors,
             correctChars: savedProgress.cursorPosition,
             wpm: 0,
-            
+
           }
         })
       }
