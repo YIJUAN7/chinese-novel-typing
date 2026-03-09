@@ -9,7 +9,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'progress', progress: number): void
   (e: 'complete'): void
-  (e: 'stats-change', stats: { elapsedTime: number; errors: number; correctChars: number; wpm: number; accuracy: number }): void
+  (e: 'stats-change', stats: { elapsedTime: number; errors: number; correctChars: number; wpm: number }): void
 }>()
 
 const editorRef = ref<HTMLElement | null>(null)
@@ -23,6 +23,7 @@ const {
   resetStats,
   recordError,
   recordCorrectChar,
+  initStats,
   state,
 } = useStats()
 
@@ -33,6 +34,9 @@ const elapsedTime = ref(0)
 const timerRef = ref<number | null>(null)
 const startTimeRef = ref<number | null>(null)
 const accumulatedTimeRef = ref(0) // 累计暂停前经过的时间
+
+// 上次保存的时间（避免保存过于频繁）
+let lastSaveTime = 0
 
 // 停止定时器
 const stopTimer = () => {
@@ -65,29 +69,45 @@ const resumeTimer = () => {
     timerRef.value = window.setInterval(() => {
       if (startTimeRef.value) {
         elapsedTime.value = accumulatedTimeRef.value + (Date.now() - startTimeRef.value) / 1000
+        // 每秒保存一次进度（检查距上次保存是否超过 1 秒）
+        const now = Date.now()
+        if (now - lastSaveTime >= 1000) {
+          lastSaveTime = now
+          // 发出统计数据变化事件，触发 App.vue 中的进度保存
+          emit('stats-change', {
+            elapsedTime: elapsedTime.value,
+            errors: state.totalErrors.value,
+            correctChars: state.correctChars.value,
+            wpm: wpm.value,
+          })
+        }
       }
     }, 100)
   }
 }
 
-// 计算 WPM 和准确率
+// 计算 WPM
+// WPM = 已打字数（光标位置）/ 时间，表示跟打整章的平均速度
 const wpm = computed(() => {
   if (elapsedTime.value === 0) return 0
   const minutes = elapsedTime.value / 60
-  return Math.round(state.correctChars.value / minutes) || 0
-})
-
-const accuracy = computed(() => {
-  const total = state.correctChars.value + state.errorChars.value
-  if (total === 0) return 100
-  return Math.round((state.correctChars.value / total) * 100)
+  return Math.round(cursorPosition.value / minutes) || 0
 })
 
 // 包装 resetStats 来停止定时器
 const wrappedResetStats = () => {
   stopTimer()
   elapsedTime.value = 0
+  accumulatedTimeRef.value = 0
+  lastSaveTime = 0
   resetStats()
+}
+
+// 初始化统计状态（用于恢复进度时）
+const initStatsState = (correctChars: number, elapsedTimeSec: number) => {
+  initStats(correctChars)
+  elapsedTime.value = elapsedTimeSec
+  accumulatedTimeRef.value = elapsedTimeSec
 }
 
 // 计算已输入和待输入文本
@@ -252,7 +272,6 @@ watch(
       errors: state.totalErrors.value,
       correctChars: state.correctChars.value,
       wpm: wpm.value,
-      accuracy: accuracy.value,
     })
 
     if (newPos === props.originalText.length && newPos > 0) {
@@ -502,6 +521,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopTimer()
+  // 卸载时触发一次 stats-change，让父组件保存最终进度
+  emit('stats-change', {
+    elapsedTime: elapsedTime.value,
+    errors: state.totalErrors.value,
+    correctChars: state.correctChars.value,
+    wpm: wpm.value,
+  })
 })
 
 defineExpose({
@@ -510,12 +536,14 @@ defineExpose({
   setCursorPosition: (pos: number) => {
     cursorPosition.value = pos
   },
+  initStats: (correctChars: number, elapsedTimeSec: number) => {
+    initStatsState(correctChars, elapsedTimeSec)
+  },
   getStats: () => ({
     elapsedTime: elapsedTime.value,
     errors: state.totalErrors.value,
     correctChars: state.correctChars.value,
     wpm: wpm.value,
-    accuracy: accuracy.value,
   }),
 })
 </script>
@@ -538,7 +566,7 @@ defineExpose({
     <div class="editor-stats">
       <span class="stat-item">时间：{{ elapsedTime.toFixed(1) }}s</span>
       <span class="stat-item">速度：{{ wpm }} 字/分</span>
-      <span class="stat-item">准确率：{{ accuracy }}%</span>
+      <span class="stat-item">错误：{{ state.totalErrors.value }}</span>
       <span v-if="hasError" class="stat-item error">{{ errorMsg }}</span>
     </div>
   </div>

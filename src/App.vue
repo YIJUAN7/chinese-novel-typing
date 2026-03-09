@@ -49,7 +49,6 @@ const currentStats = ref({
   errors: 0,
   correctChars: 0,
   wpm: 0,
-  accuracy: 100,
 })
 
 // 处理文本导入（包含章节解析）
@@ -117,13 +116,15 @@ const handleImportText = (text: string, fileName?: string) => {
       if (resume) {
         nextTick(() => {
           editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+          // 初始化统计状态：时间恢复，正确字符数设为光标位置（已打字符数）
+          editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
           progress.value = (savedProgress.cursorPosition / targetChapter.content.length) * 100
           currentStats.value = {
             elapsedTime: savedProgress.elapsedTime,
             errors: savedProgress.errors,
-            correctChars: savedProgress.correctChars,
+            correctChars: savedProgress.cursorPosition,
             wpm: 0,
-            accuracy: 100,
+            
           }
         })
       }
@@ -134,14 +135,14 @@ const handleImportText = (text: string, fileName?: string) => {
 
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0 }
 }
 
 const handleProgress = (value: number) => {
   progress.value = value
 }
 
-const handleStatsChange = (stats: { elapsedTime: number; errors: number; correctChars: number; wpm: number; accuracy: number }) => {
+const handleStatsChange = (stats: { elapsedTime: number; errors: number; correctChars: number; wpm: number }) => {
   currentStats.value = stats
 
   // 实时更新进度保存（每本小说只保留一个最新进度）
@@ -179,7 +180,7 @@ const handleComplete = () => {
 const handleReset = () => {
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0 }
 
   // 重置编辑器状态（触发原文变化以重置内部状态）
   const currentText = originalText.value
@@ -228,13 +229,15 @@ const handleNextOrReset = () => {
           if (resume) {
             nextTick(() => {
               editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+              // 初始化统计状态：时间恢复，正确字符数设为光标位置
+              editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
               progress.value = (savedProgress.cursorPosition / nextChapter.content.length) * 100
               currentStats.value = {
                 elapsedTime: savedProgress.elapsedTime,
                 errors: savedProgress.errors,
-                correctChars: savedProgress.correctChars,
+                correctChars: savedProgress.cursorPosition,
                 wpm: 0,
-                accuracy: 100,
+                
               }
             })
             return // 如果恢复进度，直接返回
@@ -246,7 +249,7 @@ const handleNextOrReset = () => {
 
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0 }
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
@@ -313,13 +316,15 @@ const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) =>
           if (resume) {
             nextTick(() => {
               editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+              // 初始化统计状态：时间恢复，正确字符数设为光标位置
+              editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
               progress.value = (savedProgress.cursorPosition / originalText.value.length) * 100
               currentStats.value = {
                 elapsedTime: savedProgress.elapsedTime,
                 errors: savedProgress.errors,
-                correctChars: savedProgress.correctChars,
+                correctChars: savedProgress.cursorPosition,
                 wpm: 0,
-                accuracy: 100,
+                
               }
             })
           }
@@ -331,7 +336,7 @@ const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) =>
 
     isComplete.value = false
     progress.value = 0
-    currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
+    currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0 }
     isSavedNovelsOpen.value = false
   }
 }
@@ -347,7 +352,7 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
   originalText.value = chapter.content
   isComplete.value = false
   progress.value = 0
-  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0, accuracy: 100 }
+  currentStats.value = { elapsedTime: 0, errors: 0, correctChars: 0, wpm: 0 }
 
   // 重置编辑器滚动位置到顶部
   nextTick(() => {
@@ -367,15 +372,17 @@ const handleSelectChapter = (chapter: { index: number; title: string; content: s
         // 设置编辑器光标位置
         nextTick(() => {
           editorRef.value?.setCursorPosition(savedProgress.cursorPosition)
+          // 初始化统计状态：时间恢复，正确字符数设为光标位置
+          editorRef.value?.initStats(savedProgress.cursorPosition, savedProgress.elapsedTime)
           // 更新进度条
           progress.value = (savedProgress.cursorPosition / chapter.content.length) * 100
           // 恢复统计数据
           currentStats.value = {
             elapsedTime: savedProgress.elapsedTime,
             errors: savedProgress.errors,
-            correctChars: savedProgress.correctChars,
+            correctChars: savedProgress.cursorPosition,
             wpm: 0,
-            accuracy: 100,
+            
           }
         })
       }
@@ -468,8 +475,8 @@ onUnmounted(() => {
             <div class="stat-label">速度</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">{{ currentStats.accuracy }}%</div>
-            <div class="stat-label">准确率</div>
+            <div class="stat-value">{{ currentStats.errors }}</div>
+            <div class="stat-label">错误</div>
           </div>
         </div>
         <p class="modal-tip-text">按任意键开始下一章</p>

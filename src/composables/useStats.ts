@@ -11,12 +11,12 @@ export interface StatsResult {
   state: StatsState
   elapsedTime: Ref<number>
   wpm: ComputedRef<number>
-  accuracy: ComputedRef<number>
   errorPositions: Ref<number[]>
   startTiming: () => void
   resetStats: () => void
   recordError: (position: number) => void
   recordCorrectChar: () => void
+  initStats: (initialCorrectChars: number) => void
 }
 
 export function useStats(): StatsResult {
@@ -31,12 +31,6 @@ export function useStats(): StatsResult {
     if (elapsed.value === 0) return 0
     const minutes = elapsed.value / 60
     return Math.round(correctChars.value / minutes) || 0
-  })
-
-  const accuracy = computed(() => {
-    const total = correctChars.value + errorChars.value
-    if (total === 0) return 100
-    return Math.round((correctChars.value / total) * 100)
   })
 
   const startTiming = () => {
@@ -68,6 +62,10 @@ export function useStats(): StatsResult {
     correctChars.value++
   }
 
+  const initStats = (initialCorrectChars: number) => {
+    correctChars.value = initialCorrectChars
+  }
+
   return {
     state: {
       startTime,
@@ -77,11 +75,11 @@ export function useStats(): StatsResult {
     },
     elapsedTime: elapsed,
     wpm,
-    accuracy,
     errorPositions,
     startTiming,
     resetStats,
     recordError,
-    recordCorrectChar
+    recordCorrectChar,
+    initStats
   }
 }
