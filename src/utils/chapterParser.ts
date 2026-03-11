@@ -23,16 +23,21 @@ const cleanText = (text: string): string => {
 }
 
 /**
- * 章节标题正则表达式
+ * 默认章节标题正则表达式
  * 只允许：数字 0-9、中文数字、中文空格 (\u3000)、英文空格 ( )
  */
-const CHAPTER_LINE_REGEX = /第[0-9 \u3000一二三四五六七八九十百千万]+章/
+export const DEFAULT_CHAPTER_REGEX = /第[0-9 \u3000一二三四五六七八九十百千万]+章/
 
 /**
  * 从小说文本中识别并分割章节
  * 采用逐行扫描的方式，更可靠
+ * @param text 小说文本
+ * @param customRegex 自定义章节匹配正则，可选
  */
-export const parseChapters = (text: string): Chapter[] => {
+export const parseChapters = (text: string, customRegex?: RegExp): Chapter[] => {
+  // 使用自定义正则或默认正则
+  const chapterRegex = customRegex || DEFAULT_CHAPTER_REGEX
+
   // 标准化换行符
   text = normalizeLineEndings(text)
 
@@ -48,7 +53,7 @@ export const parseChapters = (text: string): Chapter[] => {
     const trimmedLine = line.trim()
 
     // 检查是否是章节标题行
-    if (CHAPTER_LINE_REGEX.test(trimmedLine)) {
+    if (chapterRegex.test(trimmedLine)) {
       // 保存之前的章节
       if (currentChapter !== null) {
         chapters.push({
@@ -65,8 +70,8 @@ export const parseChapters = (text: string): Chapter[] => {
       }
       chapterIndex++
     } else if (currentChapter !== null && trimmedLine !== '') {
-      // 添加到当前章节内容
-      currentChapter.contentLines.push(line)
+      // 添加到当前章节内容（使用 trim 后的行，去除首尾空格）
+      currentChapter.contentLines.push(trimmedLine)
     }
   }
 
@@ -97,8 +102,11 @@ export const parseChapters = (text: string): Chapter[] => {
 
 /**
  * 检查文本是否包含章节结构
+ * @param text 小说文本
+ * @param customRegex 自定义章节匹配正则，可选
  */
-export const hasChapters = (text: string): boolean => {
+export const hasChapters = (text: string, customRegex?: RegExp): boolean => {
   const normalized = normalizeLineEndings(text)
-  return normalized.split('\n').some(line => CHAPTER_LINE_REGEX.test(line.trim()))
+  const chapterRegex = customRegex || DEFAULT_CHAPTER_REGEX
+  return normalized.split('\n').some(line => chapterRegex.test(line.trim()))
 }

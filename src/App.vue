@@ -52,17 +52,41 @@ const currentStats = ref({
 })
 
 // 处理文本导入（包含章节解析）
-const handleImportText = (text: string, fileName?: string) => {
-  // 格式化文本：去除中文空格（\u3000）和英文空格（ ），并去除首尾空白
-  const formattedText = text.replace(/[\u3000 ]/g, '')
+const handleImportText = (text: string, fileName?: string, customRegexStr?: string) => {
+  // 解析自定义正则
+  let customRegex: RegExp | undefined
+  if (customRegexStr) {
+    try {
+      // 支持两种格式：
+      // 1. 带斜杠和标志：/pattern/flags
+      // 2. 纯正则字符串：pattern
+      let pattern: string
+      let flags: string = ''
 
-  // 解析章节
-  const parsedChapters = parseChapters(formattedText)
+      if (customRegexStr.startsWith('/') && customRegexStr.lastIndexOf('/') > 0) {
+        // 格式：/pattern/flags
+        const lastSlashIndex = customRegexStr.lastIndexOf('/')
+        pattern = customRegexStr.slice(1, lastSlashIndex)
+        flags = customRegexStr.slice(lastSlashIndex + 1)
+      } else {
+        // 格式：pattern
+        pattern = customRegexStr
+      }
+
+      customRegex = new RegExp(pattern, flags)
+    } catch (e) {
+      console.error('自定义正则无效:', e)
+      customRegex = undefined
+    }
+  }
+
+  // 解析章节（使用原始文本，保留空格以便正则匹配）
+  const parsedChapters = parseChapters(text, customRegex)
   console.log('解析到的章节数:', parsedChapters.length)
   console.log('章节列表:', parsedChapters.map(c => c.title))
   setChapters(parsedChapters)
 
-  // 保存小说文本（使用格式化后的文本）
+  // 保存小说文本（格式化后的文本）
   // 优先使用文件名作为小说名，如果没有文件名则使用章节名
   const novelTitle = fileName
     ? `${fileName}-${new Date().toLocaleDateString('zh-CN')}`
@@ -70,6 +94,7 @@ const handleImportText = (text: string, fileName?: string) => {
       ? `小说-${parsedChapters[0]?.title}-${new Date().toLocaleDateString('zh-CN')}`
       : `小说-${new Date().toLocaleDateString('zh-CN')}`
   const chapterTitles = parsedChapters.map(c => c.title)
+  const formattedText = text.replace(/[\u3000 ]/g, '')
   saveNovel(novelTitle, formattedText, chapterTitles)
   currentNovelTitle.value = novelTitle
 
@@ -272,8 +297,33 @@ const handleOpenSavedNovels = () => {
 const handleSelectSavedNovel = (novel: { title: string; chapters: string[] }) => {
   const loaded = loadNovel(novel.title)
   if (loaded) {
+    // 从 LocalStorage 加载自定义正则
+    let customRegex: RegExp | undefined
+    const savedRegex = localStorage.getItem('customChapterRegex')
+    const useCustomRegex = localStorage.getItem('useCustomRegex') === 'true'
+    if (useCustomRegex && savedRegex) {
+      try {
+        // 支持两种格式：/pattern/flags 或 pattern
+        let pattern: string
+        let flags: string = ''
+
+        if (savedRegex.startsWith('/') && savedRegex.lastIndexOf('/') > 0) {
+          const lastSlashIndex = savedRegex.lastIndexOf('/')
+          pattern = savedRegex.slice(1, lastSlashIndex)
+          flags = savedRegex.slice(lastSlashIndex + 1)
+        } else {
+          pattern = savedRegex
+        }
+
+        customRegex = new RegExp(pattern, flags)
+      } catch (e) {
+        console.error('自定义正则无效:', e)
+        customRegex = undefined
+      }
+    }
+
     // 解析章节
-    const parsedChapters = parseChapters(loaded.content)
+    const parsedChapters = parseChapters(loaded.content, customRegex)
     setChapters(parsedChapters)
 
     // 设置当前小说标题

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 
 const props = defineProps<{
   chapterCount: number
 }>()
 
 const emit = defineEmits<{
-  (e: 'import-text', text: string, fileName?: string): void
+  (e: 'import-text', text: string, fileName?: string, customRegex?: string): void
   (e: 'reset'): void
   (e: 'open-chapter-list'): void
   (e: 'open-saved-novels'): void
@@ -17,15 +17,87 @@ const inputText = ref('')
 const isUploading = ref(false)
 const errorMessage = ref('')
 const showNoChapterToast = ref(false)
+const customRegex = ref('')
+const useCustomRegex = ref(false)
+const regexError = ref('')
+const pendingFileImport = ref<{ text: string; fileName: string } | null>(null)
+const fileInfo = ref<{ name: string; size: string } | null>(null)
+const isFileImportMode = ref(false)
+
+// 从 LocalStorage 加载自定义正则设置
+const loadCustomRegexSetting = () => {
+  const saved = localStorage.getItem('customChapterRegex')
+  const enabled = localStorage.getItem('useCustomRegex')
+  if (saved) {
+    customRegex.value = saved
+  }
+  if (enabled === 'true') {
+    useCustomRegex.value = true
+  }
+}
+
+// 保存自定义正则设置到 LocalStorage
+const saveCustomRegexSetting = () => {
+  if (useCustomRegex.value && customRegex.value.trim()) {
+    localStorage.setItem('customChapterRegex', customRegex.value.trim())
+    localStorage.setItem('useCustomRegex', 'true')
+  } else {
+    localStorage.removeItem('customChapterRegex')
+    localStorage.removeItem('useCustomRegex')
+  }
+}
+
+// 组件挂载时加载设置
+onMounted(() => {
+  loadCustomRegexSetting()
+})
+
+// 关闭弹窗时的处理
+const handleCloseModal = () => {
+  showModal.value = false
+  inputText.value = ''
+  pendingFileImport.value = null
+  fileInfo.value = null
+  isFileImportMode.value = false
+  regexError.value = ''
+}
+
+// 格式化文件大小
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+}
 
 const handleImport = () => {
-  if (inputText.value.trim()) {
+  // 确定文本来源：文件导入从 pendingFileImport 获取，手动粘贴从 inputText 获取
+  const text = isFileImportMode.value ? pendingFileImport.value?.text : inputText.value
+
+  if (text?.trim()) {
     // 标准化换行符
-    const text = inputText.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-    emit('import-text', text.trim())
-    showModal.value = false
-    inputText.value = ''
-    errorMessage.value = ''
+    const processedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+    // 如果启用自定义正则，验证正则有效性
+    if (useCustomRegex.value && customRegex.value.trim()) {
+      try {
+        new RegExp(customRegex.value.trim())
+        regexError.value = ''
+      } catch {
+        regexError.value = '正则表达式格式无效，请检查'
+        return
+      }
+    }
+
+    // 保存自定义正则设置
+    saveCustomRegexSetting()
+
+    // 确定文件名：如果有待处理的文件导入则使用文件名，否则为 undefined
+    const fileName = pendingFileImport.value?.fileName
+
+    emit('import-text', processedText.trim(), fileName, useCustomRegex.value && customRegex.value.trim() ? customRegex.value.trim() : undefined)
+
+    // 重置状态
+    handleCloseModal()
   }
 }
 
@@ -57,7 +129,12 @@ const handleFileImport = async (e: Event) => {
       text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
       // 传递文件名（不含扩展名）
       const fileName = file.name.replace(/\.txt$/i, '')
-      emit('import-text', text.trim(), fileName)
+
+      // 保存文件内容和信息
+      pendingFileImport.value = { text: text.trim(), fileName }
+      fileInfo.value = { name: file.name, size: formatFileSize(file.size) }
+      isFileImportMode.value = true
+      showModal.value = true
       isUploading.value = false
     }
     reader.onerror = () => {
@@ -133,22 +210,56 @@ const handleOpenSavedNovels = () => {
   </div>
 
   <!-- 导入文本弹窗 -->
-  <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+  <div v-if="showModal" class="modal-overlay" @click.self="handleCloseModal">
     <div class="modal">
       <div class="modal-header">
-        <h2>导入小说文本</h2>
-        <button class="btn-close" @click="showModal = false">×</button>
+        <h2>{{ isFileImportMode ? '导入文件' : '导入文本' }}</h2>
+        <button class="btn-close" @click="handleCloseModal">×</button>
       </div>
       <div class="modal-body">
-        <p class="modal-tip">支持粘贴文本或上传 .txt 文件，自动识别章节结构</p>
-        <textarea
-          v-model="inputText"
-          placeholder="请粘贴要练习的小说文本..."
-          rows="10"
-        ></textarea>
+        <!-- 文件导入模式：显示文件信息 -->
+        <div v-if="isFileImportMode && fileInfo" class="file-info-section">
+          <div class="file-info-item">
+            <span class="label">文件名：</span>
+            <span class="value">{{ fileInfo.name }}</span>
+          </div>
+          <div class="file-info-item">
+            <span class="label">大小：</span>
+            <span class="value">{{ fileInfo.size }}</span>
+          </div>
+        </div>
+
+        <!-- 手动粘贴模式：显示文本框 -->
+        <div v-else>
+          <p class="modal-tip">支持粘贴文本，自动识别章节结构</p>
+          <textarea
+            v-model="inputText"
+            placeholder="请粘贴要练习的小说文本..."
+            rows="10"
+          ></textarea>
+        </div>
+
+        <!-- 自定义章节正则 -->
+        <div class="custom-regex-section">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="useCustomRegex" />
+            <span>使用自定义章节匹配正则</span>
+          </label>
+          <div v-if="useCustomRegex" class="regex-input-wrapper">
+            <input
+              type="text"
+              v-model="customRegex"
+              placeholder="例如：^[0-9]+、或/^第\s*\d+\s*章/"
+              class="regex-input"
+            />
+            <p class="regex-tip">支持两种格式：<code>^[0-9]+、</code> 或 <code>/^\d+/</code></p>
+            <p class="regex-tip">默认正则：<code>/第 [0-9 \u3000一二三四五六七八九十百千万]+章/</code></p>
+            <p v-if="regexError" class="regex-error">{{ regexError }}</p>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" @click="showModal = false">取消</button>
+        <button class="btn btn-secondary" @click="handleCloseModal">取消</button>
         <button class="btn btn-primary" @click="handleImport">确定</button>
       </div>
     </div>
@@ -299,6 +410,98 @@ const handleOpenSavedNovels = () => {
   gap: var(--spacing-sm);
   padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--bg-tertiary);
+}
+
+/* 文件信息显示样式 */
+.file-info-section {
+  background: var(--bg-tertiary);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.file-info-item {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.file-info-item:last-child {
+  margin-bottom: 0;
+}
+
+.file-info-item .label {
+  color: var(--text-secondary);
+  font-size: 14px;
+  min-width: 60px;
+}
+
+.file-info-item .value {
+  color: var(--text-primary);
+  font-size: 14px;
+  word-break: break-all;
+}
+
+/* 自定义正则样式 */
+.custom-regex-section {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--bg-tertiary);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.regex-input-wrapper {
+  margin-top: var(--spacing-sm);
+}
+
+.regex-input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  font-family: monospace;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.regex-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+}
+
+.regex-tip {
+  margin-top: var(--spacing-xs);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.regex-tip code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.regex-error {
+  margin-top: var(--spacing-xs);
+  font-size: 12px;
+  color: var(--color-error);
 }
 
 .error-toast {
