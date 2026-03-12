@@ -94,6 +94,27 @@ const wpm = computed(() => {
   return Math.round(cursorPosition.value / minutes) || 0
 })
 
+// 格式化时间显示
+const formattedTime = computed(() => {
+  const totalSeconds = Math.floor(elapsedTime.value)
+
+  if (totalSeconds >= 3600) {
+    // 超过 1 小时：显示 X 小时 Y 分 Z 秒
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+    return `${hours}小时${minutes}分${seconds}秒`
+  } else if (totalSeconds >= 60) {
+    // 超过 1 分钟：显示 Y 分 Z 秒
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}分${seconds}秒`
+  } else {
+    // 小于 1 分钟：显示 X 秒
+    return `${totalSeconds}秒`
+  }
+})
+
 // 包装 resetStats 来停止定时器
 const wrappedResetStats = () => {
   stopTimer()
@@ -564,7 +585,7 @@ defineExpose({
     </div>
 
     <div class="editor-stats">
-      <span class="stat-item">时间：{{ elapsedTime.toFixed(1) }}s</span>
+      <span class="stat-item">时间：{{ formattedTime }}</span>
       <span class="stat-item">速度：{{ wpm }} 字/分</span>
       <span class="stat-item">错误：{{ state.totalErrors.value }}</span>
       <span v-if="hasError" class="stat-item error">{{ errorMsg }}</span>
