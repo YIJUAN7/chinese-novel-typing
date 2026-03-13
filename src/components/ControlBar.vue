@@ -10,6 +10,7 @@ const emit = defineEmits<{
   (e: 'reset'): void
   (e: 'open-chapter-list'): void
   (e: 'open-saved-novels'): void
+  (e: 'open-settings'): void
 }>()
 
 const showModal = ref(false)
@@ -170,12 +171,16 @@ const handleOpenChapterList = () => {
 const handleOpenSavedNovels = () => {
   emit('open-saved-novels')
 }
+
+const handleOpenSettings = () => {
+  emit('open-settings')
+}
 </script>
 
 <template>
   <div class="control-bar">
     <div class="control-group">
-      <button class="btn btn-primary" @click="showModal = true">
+      <button class="btn btn-secondary" @click="showModal = true">
         📄 导入文本
       </button>
       <label class="btn btn-secondary">
@@ -193,6 +198,9 @@ const handleOpenSavedNovels = () => {
     <div class="control-group">
       <button class="btn btn-secondary" @click="handleReset">
         🔄 重置
+      </button>
+      <button class="btn btn-secondary" @click="handleOpenSettings">
+        ⚙️ 设置
       </button>
     </div>
   </div>
@@ -342,7 +350,7 @@ const handleOpenSavedNovels = () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -397,11 +405,13 @@ const handleOpenSavedNovels = () => {
   font-size: 14px;
   resize: vertical;
   outline: none;
+  background: var(--bg-quaternary);
+  color: var(--text-primary);
 }
 
 .modal-body textarea:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .modal-footer {
@@ -414,7 +424,7 @@ const handleOpenSavedNovels = () => {
 
 /* 文件信息显示样式 */
 .file-info-section {
-  background: var(--bg-tertiary);
+  background: var(--bg-quaternary);
   padding: var(--spacing-md);
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-md);
@@ -478,11 +488,13 @@ const handleOpenSavedNovels = () => {
   font-size: 13px;
   outline: none;
   box-sizing: border-box;
+  background: var(--bg-quaternary);
+  color: var(--text-primary);
 }
 
 .regex-input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .regex-tip {

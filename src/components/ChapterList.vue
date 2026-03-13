@@ -103,7 +103,7 @@ const currentChapter = computed(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -181,6 +181,8 @@ const currentChapter = computed(() => {
   font-size: var(--font-size-base);
   outline: none;
   transition: border-color 0.2s;
+  background: var(--bg-quaternary);
+  color: var(--text-primary);
 }
 
 .search-input:focus {

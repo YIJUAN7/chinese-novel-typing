@@ -11,14 +11,26 @@
   --text-secondary: #6b7280;
   --text-disabled: #9ca3af;
   --text-pending: #9ca3af;
+  --text-hint: #999999;
+  --text-tip: #888888;
 
   /* 背景色 */
   --bg-primary: #ffffff;
   --bg-secondary: #f3f4f6;
   --bg-tertiary: #e5e7eb;
+  --bg-quaternary: #f9fafb;
+
+  /* 遮罩层背景 */
+  --overlay-bg: rgba(0, 0, 0, 0.5);
 
   /* 光标颜色 */
   --cursor-color: #4a9eff;
+
+  /* 焦点环颜色 */
+  --focus-ring: rgba(74, 158, 255, 0.2);
+
+  /* 错误背景 */
+  --error-bg: rgba(255, 77, 79, 0.2);
 
   /* 字体 */
   --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;

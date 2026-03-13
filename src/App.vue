@@ -3,12 +3,24 @@ import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import ControlBar from './components/ControlBar.vue'
 import TypingEditor from './components/TypingEditor.vue'
 import ChapterList from './components/ChapterList.vue'
+import AnnouncementModal from './components/AnnouncementModal.vue'
 import { useChapter } from './composables/useChapter'
 import { parseChapters } from './utils/chapterParser'
 import { useProgressStorage } from './composables/useProgressStorage'
+import { initTheme, getBuiltInThemes, setTheme } from './utils/themes'
+import { announcements } from './data/announcements'
+import type { Announcement } from './data/announcements'
 
 // 已保存小说列表弹窗状态
 const isSavedNovelsOpen = ref(false)
+
+// 设置面板状态
+const isSettingsOpen = ref(false)
+const currentTheme = ref('light')
+
+// 公告相关
+const showAnnouncement = ref(false)
+const currentAnnouncement = ref<Announcement | null>(null)
 
 // 默认示例文本
 const defaultText = `多年以后，奥雷连诺上校站在行刑队面前，准会想起父亲带他去参观冰块的那个遥远的下午。`
@@ -50,6 +62,27 @@ const currentStats = ref({
   correctChars: 0,
   wpm: 0,
 })
+
+// 格式化时间显示（与 TypingEditor.vue 保持一致）
+const formatTime = (seconds: number): string => {
+  const totalSeconds = Math.floor(seconds)
+
+  if (totalSeconds >= 3600) {
+    // 超过 1 小时：显示 X 小时 Y 分 Z 秒
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const secs = totalSeconds % 60
+    return `${hours}小时${minutes}分${secs}秒`
+  } else if (totalSeconds >= 60) {
+    // 超过 1 分钟：显示 Y 分 Z 秒
+    const minutes = Math.floor(totalSeconds / 60)
+    const secs = totalSeconds % 60
+    return `${minutes}分${secs}秒`
+  } else {
+    // 小于 1 分钟：显示 X 秒
+    return `${totalSeconds}秒`
+  }
+}
 
 // 处理文本导入（包含章节解析）
 const handleImportText = (text: string, fileName?: string, customRegexStr?: string) => {
@@ -461,12 +494,56 @@ watch(
 
 // 监听键盘事件（完成状态下按任意键开始下一章）
 onMounted(() => {
+  // 初始化主题
+  initTheme()
+  currentTheme.value = localStorage.getItem('novel-typing-theme') || 'light'
+
+  // 检查未读公告
+  const readIds = JSON.parse(localStorage.getItem('readAnnouncements') || '[]')
+  const unread = announcements.filter(a => !readIds.includes(a.id))
+  if (unread.length > 0) {
+    // 显示最新的未读公告（数组第一个是最新的）
+    const latestAnnouncement = unread[0]
+    if (latestAnnouncement) {
+      currentAnnouncement.value = latestAnnouncement
+      showAnnouncement.value = true
+    }
+  }
+
   window.addEventListener('keydown', handleKeydown)
   // 页面加载时自动聚焦到输入区域
   nextTick(() => {
     editorRef.value?.focusEditor()
   })
 })
+
+// 处理公告确认
+const handleAnnouncementConfirm = () => {
+  if (currentAnnouncement.value) {
+    const readIds = JSON.parse(localStorage.getItem('readAnnouncements') || '[]')
+    readIds.push(currentAnnouncement.value.id)
+    localStorage.setItem('readAnnouncements', JSON.stringify(readIds))
+    showAnnouncement.value = false
+  }
+}
+
+// 主题相关函数
+const themes = getBuiltInThemes()
+
+const handleThemeChange = (themeName: string) => {
+  setTheme(themeName)
+  currentTheme.value = themeName
+}
+
+// 打开设置面板
+const openSettings = () => {
+  isSettingsOpen.value = true
+}
+
+// 关闭设置面板
+const closeSettings = () => {
+  isSettingsOpen.value = false
+}
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
@@ -486,6 +563,7 @@ onUnmounted(() => {
         @reset="handleReset"
         @open-chapter-list="handleOpenChapterList"
         @open-saved-novels="handleOpenSavedNovels"
+        @open-settings="openSettings"
       />
 
       <div class="editor-wrapper">
@@ -517,7 +595,7 @@ onUnmounted(() => {
         <h2>🎉 恭喜完成！</h2>
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-value">{{ currentStats.elapsedTime.toFixed(1) }}s</div>
+            <div class="stat-value">{{ formatTime(currentStats.elapsedTime) }}</div>
             <div class="stat-label">时间</div>
           </div>
           <div class="stat-card">
@@ -583,6 +661,45 @@ onUnmounted(() => {
 
     <!-- 作者信息 -->
     <footer class="app-footer">by 寒号鸟</footer>
+
+    <!-- 设置面板 -->
+    <div v-if="isSettingsOpen" class="modal-overlay" @click.self="closeSettings">
+      <div class="settings-modal">
+        <div class="modal-header">
+          <h2>⚙️ 设置</h2>
+          <button class="close-btn" @click="closeSettings">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-section">
+            <h3 class="section-title">主题选择</h3>
+            <div class="theme-grid">
+              <div
+                v-for="theme in themes"
+                :key="theme.name"
+                class="theme-card"
+                :class="{ active: currentTheme === theme.name }"
+                @click="handleThemeChange(theme.name)"
+              >
+                <div class="theme-preview" :style="{ background: theme.colors.bgPrimary }">
+                  <div class="theme-preview-text" :style="{ color: theme.colors.textPrimary }">
+                    Aa
+                  </div>
+                </div>
+                <span class="theme-name">{{ theme.label }}</span>
+                <span v-if="currentTheme === theme.name" class="theme-check">✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 更新公告 -->
+    <AnnouncementModal
+      :show="showAnnouncement"
+      :announcement="currentAnnouncement"
+      @confirm="handleAnnouncementConfirm"
+    />
   </div>
 </template>
 
@@ -685,7 +802,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -774,27 +891,7 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* 小说列表关闭按钮样式 - 与章节列表一致 */
-.saved-novels-modal .close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  transition: background-color 0.2s;
-}
-
-.saved-novels-modal .close-btn:hover {
-  background-color: var(--bg-tertiary);
-}
-
+/* 小说列表 */
 .saved-novels-modal .modal-body {
   padding: var(--spacing-lg);
   overflow-y: auto;
@@ -881,7 +978,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -895,7 +992,166 @@ onUnmounted(() => {
   bottom: 8px;
   right: 16px;
   font-size: 12px;
-  color: #999;
+  color: var(--text-hint);
   user-select: none;
+}
+
+/* 通用关闭按钮样式 */
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  transition: background-color 0.2s;
+}
+
+.close-btn:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* 设置按钮 */
+.settings-btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.settings-btn:hover {
+  background: var(--bg-secondary);
+}
+
+/* 设置面板样式 */
+.settings-modal {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+.settings-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.settings-modal .modal-header h2 {
+  font-size: 18px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.settings-modal .modal-body {
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+.setting-section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.setting-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-md);
+  font-weight: 500;
+}
+
+/* 主题网格 */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.theme-card {
+  position: relative;
+  border: 2px solid var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.theme-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+}
+
+.theme-card.active {
+  border-color: var(--color-primary);
+  background: var(--bg-secondary);
+}
+
+.theme-preview {
+  width: 100%;
+  aspect-ratio: 16/10;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.theme-preview-text {
+  font-size: 20px;
+  font-weight: bold;
+  font-family: serif;
+}
+
+.theme-name {
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.theme-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  color: var(--color-primary);
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* 动画 */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

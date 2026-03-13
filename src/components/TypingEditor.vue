@@ -656,7 +656,7 @@ defineExpose({
 }
 
 .editor-content .cursor.error {
-  background-color: rgba(255, 77, 79, 0.2);
+  background-color: var(--error-bg);
 }
 
 .editor-content .cursor.error::before {
