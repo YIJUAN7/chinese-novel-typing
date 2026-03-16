@@ -17,6 +17,9 @@ const isSavedNovelsOpen = ref(false)
 // 设置面板状态
 const isSettingsOpen = ref(false)
 const currentTheme = ref('light')
+const skipPunctuation = ref(false)
+const customSkipChars = ref('')
+const pendingLines = ref(0)
 
 // 公告相关
 const showAnnouncement = ref(false)
@@ -498,6 +501,13 @@ onMounted(() => {
   initTheme()
   currentTheme.value = localStorage.getItem('novel-typing-theme') || 'light'
 
+  // 加载跟打符号设置
+  skipPunctuation.value = localStorage.getItem('skipPunctuation') === 'true'
+  // 加载自定义跳过符号设置
+  customSkipChars.value = localStorage.getItem('customSkipChars') || ''
+  // 加载未跟打行数设置
+  pendingLines.value = parseInt(localStorage.getItem('pendingLines') || '0')
+
   // 检查未读公告
   const readIds = JSON.parse(localStorage.getItem('readAnnouncements') || '[]')
   const unread = announcements.filter(a => !readIds.includes(a.id))
@@ -535,9 +545,36 @@ const handleThemeChange = (themeName: string) => {
   currentTheme.value = themeName
 }
 
+// 处理跟打符号设置变更
+const handleSkipPunctuationChange = () => {
+  localStorage.setItem('skipPunctuation', skipPunctuation.value ? 'true' : 'false')
+}
+
+// 处理自定义跳过符号设置变更
+const handleCustomSkipCharsChange = () => {
+  localStorage.setItem('customSkipChars', customSkipChars.value)
+}
+
+// 处理未跟打行数设置变更
+const handlePendingLinesChange = () => {
+  const val = pendingLines.value < 0 ? 0 : pendingLines.value
+  pendingLines.value = val
+  localStorage.setItem('pendingLines', val.toString())
+  // 触发编辑器更新
+  nextTick(() => {
+    editorRef.value?.focusEditor()
+  })
+}
+
 // 打开设置面板
 const openSettings = () => {
   isSettingsOpen.value = true
+  // 加载跟打符号设置
+  skipPunctuation.value = localStorage.getItem('skipPunctuation') === 'true'
+  // 加载自定义跳过符号设置
+  customSkipChars.value = localStorage.getItem('customSkipChars') || ''
+  // 加载未跟打行数设置
+  pendingLines.value = parseInt(localStorage.getItem('pendingLines') || '0')
 }
 
 // 关闭设置面板
@@ -570,6 +607,9 @@ onUnmounted(() => {
         <TypingEditor
           ref="editorRef"
           :original-text="originalText"
+          :skip-punctuation="skipPunctuation"
+          :custom-skip-chars="customSkipChars"
+          :pending-lines="pendingLines"
           @progress="handleProgress"
           @complete="handleComplete"
           @stats-change="handleStatsChange"
@@ -688,6 +728,38 @@ onUnmounted(() => {
                 <span class="theme-name">{{ theme.label }}</span>
                 <span v-if="currentTheme === theme.name" class="theme-check">✓</span>
               </div>
+            </div>
+          </div>
+          <div class="setting-section">
+            <h3 class="section-title">打字设置</h3>
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="skipPunctuation" @change="handleSkipPunctuationChange" />
+              <span>不跟打符号（自动跳过标点符号和换行符）</span>
+            </label>
+            <div class="custom-skip-chars">
+              <label for="customSkipChars" class="custom-skip-label">自定义跳过符号（留空使用默认）：</label>
+              <input
+                id="customSkipChars"
+                type="text"
+                v-model="customSkipChars"
+                @input="handleCustomSkipCharsChange"
+                placeholder="例如：，。！？或 \\n \\t"
+                class="text-input"
+              />
+              <p class="hint-text">支持转义符号：<code>\n</code>（换行）、<code>\t</code>（制表符）、<code>\r</code>（回车）、<code>\\</code>（反斜杠）</p>
+            </div>
+            <div class="pending-lines-setting">
+              <label for="pendingLines" class="pending-lines-label">未跟打文本显示行数（0 表示全部显示）：</label>
+              <input
+                id="pendingLines"
+                type="number"
+                min="0"
+                v-model.number="pendingLines"
+                @input="handlePendingLinesChange"
+                placeholder="0"
+                class="text-input number-input"
+              />
+              <p class="hint-text">0=全部显示，1=只显示当前行，2=显示当前行及下一行，以此类推</p>
             </div>
           </div>
         </div>
@@ -1080,6 +1152,86 @@ onUnmounted(() => {
   color: var(--text-secondary);
   margin-bottom: var(--spacing-md);
   font-weight: 500;
+}
+
+/* 自定义跳过符号输入框 */
+.custom-skip-chars {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.custom-skip-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.text-input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.text-input:focus {
+  border-color: var(--color-primary);
+}
+
+.text-input::placeholder {
+  color: var(--text-hint);
+}
+
+.hint-text {
+  margin-top: var(--spacing-sm);
+  font-size: 12px;
+  color: var(--text-hint);
+}
+
+.hint-text code {
+  display: inline-block;
+  padding: 1px 4px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 未跟打行数设置 */
+.pending-lines-setting {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.pending-lines-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.number-input {
+  width: 100px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
 }
 
 /* 主题网格 */

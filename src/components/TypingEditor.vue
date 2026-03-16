@@ -4,6 +4,9 @@ import { useStats } from '@/composables/useStats'
 
 const props = defineProps<{
   originalText: string
+  skipPunctuation?: boolean
+  customSkipChars?: string
+  pendingLines?: number
 }>()
 
 const emit = defineEmits<{
@@ -18,6 +21,8 @@ const cursorPosition = ref(0)
 const hasError = ref(false)
 const errorMsg = ref('')
 const isFocused = ref(false)
+// 记录用户实际输入的字符数（用于速度计算，不包括自动跳过的符号）
+const actualInputCount = ref(0)
 
 const {
   resetStats,
@@ -86,12 +91,13 @@ const resumeTimer = () => {
   }
 }
 
-// 计算 WPM
-// WPM = 已打字数（光标位置）/ 时间，表示跟打整章的平均速度
+// 计算 WPM - 使用实际输入字符数而不是光标位置
 const wpm = computed(() => {
   if (elapsedTime.value === 0) return 0
   const minutes = elapsedTime.value / 60
-  return Math.round(cursorPosition.value / minutes) || 0
+  // 如果启用跳过符号模式，使用实际输入字符数；否则使用光标位置
+  const inputCount = props.skipPunctuation ? actualInputCount.value : cursorPosition.value
+  return Math.round(inputCount / minutes) || 0
 })
 
 // 格式化时间显示
@@ -121,6 +127,7 @@ const wrappedResetStats = () => {
   elapsedTime.value = 0
   accumulatedTimeRef.value = 0
   lastSaveTime = 0
+  actualInputCount.value = 0
   resetStats()
 }
 
@@ -129,11 +136,48 @@ const initStatsState = (correctChars: number, elapsedTimeSec: number, errors: nu
   initStats(correctChars, elapsedTimeSec, errors)
   elapsedTime.value = elapsedTimeSec
   accumulatedTimeRef.value = elapsedTimeSec
+  // 在跳过符号模式下，correctChars 参数表示实际输入字符数
+  if (props.skipPunctuation) {
+    actualInputCount.value = correctChars
+  }
 }
 
 // 计算已输入和待输入文本
 const typedText = computed(() => props.originalText.slice(0, cursorPosition.value))
 const pendingText = computed(() => props.originalText.slice(cursorPosition.value))
+
+// 根据 pendingLines 设置分割待跟打文本为可见部分和隐藏部分
+const visiblePendingText = computed(() => {
+  if (!props.pendingLines || props.pendingLines === 0) {
+    return pendingText.value
+  }
+
+  const text = pendingText.value
+  let lineCount = 1 // 从当前行开始计数（第一行）
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\n') {
+      if (lineCount >= props.pendingLines) {
+        return text.slice(0, i + 1) // 包括当前换行符
+      }
+      lineCount++
+    }
+  }
+
+  // 如果没有找到足够的换行符，返回全部文本
+  return text
+})
+
+const hiddenPendingText = computed(() => {
+  if (!props.pendingLines || props.pendingLines === 0) {
+    return ''
+  }
+
+  const text = pendingText.value
+  const visible = visiblePendingText.value
+
+  return text.slice(visible.length)
+})
 
 // 转义 HTML 防止 XSS
 const escapeHtml = (text: string) => {
@@ -152,7 +196,8 @@ const updateEditorContent = () => {
   editorRef.value.innerHTML = `
     <span class="typed-text">${escapeHtml(typedText.value)}</span
     ><span class="cursor ${hasError.value ? 'error' : ''}">|</span
-    ><span class="pending-text">${escapeHtml(pendingText.value)}</span>
+    ><span class="visible-pending-text">${escapeHtml(visiblePendingText.value)}</span
+    ><span class="hidden-pending-text">${escapeHtml(hiddenPendingText.value)}</span>
   `
 
   // 恢复光标到 cursor span 后面
@@ -191,7 +236,7 @@ const autoScrollToCursor = () => {
 
   // 如果光标位置超过中间位置，且还有待输入的内容，就向下滚动
   if (cursorRect.top > editorMidpoint) {
-    // 检查是否还有待输入的内容
+    // 检查是否还有待输入的内容（使用完整的 pendingText，而不是可见部分）
     const hasPendingContent = pendingText.value.length > 0
     if (!hasPendingContent) {
       return
@@ -252,6 +297,42 @@ const normalizeChar = (char: string): string => {
   return punctuationMap[char] || char
 }
 
+// 处理转义序列，将 \n \t \r 等转换为实际字符
+const processEscapeSequences = (str: string): string => {
+  return str
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\\\/g, '\\')
+}
+
+// 判断字符是否为标点符号或空白字符（用于跳过模式）
+const isPunctuation = (char: string): boolean => {
+  if (!char) return false
+  // 如果用户自定义了跳过符号，使用自定义的（处理转义序列）；否则使用默认的
+  const defaultSkipChars = `，。；……“”‘’：！？、'"（）【】{}〈〉《》「」『』—～,.;:.!?()[]{}<>()-~` + '\u3000 \n\r\t'
+  const skipChars = props.customSkipChars
+    ? processEscapeSequences(props.customSkipChars)
+    : defaultSkipChars
+
+  return skipChars.includes(char)
+}
+
+// 获取下一个非符号字符的位置
+const getNextNonPunctuationPosition = (pos: number): number => {
+  if (!props.skipPunctuation) return pos
+
+  let nextPos = pos
+  while (nextPos < props.originalText.length) {
+    const char = props.originalText[nextPos]
+    if (char && !isPunctuation(char)) {
+      break
+    }
+    nextPos++
+  }
+  return nextPos
+}
+
 // 监听原文变化
 watch(
   () => props.originalText,
@@ -265,6 +346,16 @@ watch(
   { immediate: true }
 )
 
+// 监听 pendingLines 设置变化，立即更新显示
+watch(
+  () => props.pendingLines,
+  () => {
+    if (!isUpdating) {
+      nextTick(() => updateEditorContent())
+    }
+  }
+)
+
 // 监听光标位置变化
 watch(
   () => cursorPosition.value,
@@ -272,10 +363,13 @@ watch(
     // 只在没有错误且位置前进时才记录正确字符
     // 注意：hasError 可能在此处已经被设置为 true（部分匹配情况），所以不重复记录
     if (newPos > oldPos && !hasError.value) {
-      // 根据前进的字符数记录正确字符
-      const charsAdvanced = newPos - oldPos
-      for (let i = 0; i < charsAdvanced; i++) {
-        recordCorrectChar()
+      // 根据前进的字符数记录正确字符（不包括自动跳过的符号）
+      // 在跳过符号模式下，actualInputCount 已经记录了用户实际输入的字符
+      if (!props.skipPunctuation) {
+        const charsAdvanced = newPos - oldPos
+        for (let i = 0; i < charsAdvanced; i++) {
+          recordCorrectChar()
+        }
       }
       // 只在有实际输入时才恢复/启动计时
       resumeTimer()
@@ -288,10 +382,12 @@ watch(
     emit('progress', progress)
 
     // 发出统计数据变化事件
+    // 在跳过符号模式下，使用 actualInputCount 作为正确字符数
+    const correctChars = props.skipPunctuation ? actualInputCount.value : state.correctChars.value
     emit('stats-change', {
       elapsedTime: elapsedTime.value,
       errors: state.totalErrors.value,
-      correctChars: state.correctChars.value,
+      correctChars: correctChars,
       wpm: wpm.value,
     })
 
@@ -381,6 +477,18 @@ const handleEditorInput = (e: Event) => {
     hasError.value = false
     errorMsg.value = ''
     cursorPosition.value += matchLength
+    // 记录实际输入字符数
+    actualInputCount.value += matchLength
+
+    // 如果启用跳过符号模式，检查下一个字符是否为符号
+    if (props.skipPunctuation) {
+      const nextNonPunctPos = getNextNonPunctuationPosition(cursorPosition.value)
+      if (nextNonPunctPos > cursorPosition.value) {
+        // 有符号需要跳过，不视为用户输入
+        cursorPosition.value = nextNonPunctPos
+      }
+    }
+
     nextTick(() => {
       updateEditorContent()
       nextTick(() => autoScrollToCursor())
@@ -390,6 +498,18 @@ const handleEditorInput = (e: Event) => {
     hasError.value = true // 设置为错误状态以显示错误提示
     errorMsg.value = ''
     cursorPosition.value += matchLength
+    // 记录实际输入字符数
+    actualInputCount.value += matchLength
+
+    // 如果启用跳过符号模式，检查下一个字符是否为符号
+    if (props.skipPunctuation) {
+      const nextNonPunctPos = getNextNonPunctuationPosition(cursorPosition.value)
+      if (nextNonPunctPos > cursorPosition.value) {
+        // 有符号需要跳过，不视为用户输入
+        cursorPosition.value = nextNonPunctPos
+      }
+    }
+
     // 记录错误（在光标位置移动后设置错误信息）
     const expectedChar = props.originalText[cursorPosition.value]
     const actualChar = inputText[matchLength]
@@ -494,11 +614,34 @@ const handleCompositionEnd = (e: CompositionEvent) => {
     hasError.value = false
     errorMsg.value = ''
     cursorPosition.value += matchLength
+    // 记录实际输入字符数
+    actualInputCount.value += matchLength
+
+    // 如果启用跳过符号模式，检查下一个字符是否为符号
+    if (props.skipPunctuation) {
+      const nextNonPunctPos = getNextNonPunctuationPosition(cursorPosition.value)
+      if (nextNonPunctPos > cursorPosition.value) {
+        // 有符号需要跳过，不视为用户输入
+        cursorPosition.value = nextNonPunctPos
+      }
+    }
   } else {
     // 部分匹配：只前进匹配的字符
     hasError.value = true // 设置为错误状态以显示错误提示
     errorMsg.value = ''
     cursorPosition.value += matchLength
+    // 记录实际输入字符数
+    actualInputCount.value += matchLength
+
+    // 如果启用跳过符号模式，检查下一个字符是否为符号
+    if (props.skipPunctuation) {
+      const nextNonPunctPos = getNextNonPunctuationPosition(cursorPosition.value)
+      if (nextNonPunctPos > cursorPosition.value) {
+        // 有符号需要跳过，不视为用户输入
+        cursorPosition.value = nextNonPunctPos
+      }
+    }
+
     // 设置错误信息
     const expectedChar = props.originalText[cursorPosition.value]
     const actualChar = inputText[matchLength]
@@ -620,6 +763,14 @@ defineExpose({
   cursor: text;
   overflow-y: auto;
   scroll-behavior: smooth;
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+/* Chrome/Safari/Opera 隐藏滚动条 */
+.editor-content::-webkit-scrollbar {
+  display: none;
 }
 
 .editor-content:focus {
@@ -663,8 +814,15 @@ defineExpose({
   color: var(--color-error);
 }
 
-.editor-content .pending-text {
+.editor-content .visible-pending-text {
   color: var(--text-pending);
+}
+
+.editor-content .hidden-pending-text {
+  /* 使用 color: transparent 让文本不可见，但仍占据空间 */
+  color: transparent;
+  /* 保持占据空间 */
+  display: inline;
 }
 
 @keyframes blink {
